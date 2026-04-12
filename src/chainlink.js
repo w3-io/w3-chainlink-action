@@ -355,7 +355,7 @@ export async function ccipSend(
 
   return {
     status: 'sent',
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     sourceChain,
     destinationChain,
     router,
@@ -385,7 +385,7 @@ export async function vrfCreateSubscription(chain, { rpcUrl } = {}) {
 
   return {
     subscriptionId: subId,
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     coordinator,
     chain,
   }
@@ -448,7 +448,7 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl }
   return {
     subscriptionId,
     consumer,
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     coordinator,
     chain,
   }
@@ -480,7 +480,7 @@ export async function vrfFundSubscription(subscriptionId, chain, { amount, rpcUr
   return {
     subscriptionId,
     amount,
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     coordinator,
     chain,
   }
@@ -515,7 +515,7 @@ export async function vrfRequest(
   }, net.network)
 
   return {
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     subscriptionId,
     numWords,
     coordinator,
@@ -544,7 +544,7 @@ export async function functionsCreateSubscription(chain, { rpcUrl } = {}) {
 
   return {
     subscriptionId: subId,
-    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    txHash: extractTxHash(receipt),
     router,
     chain,
   }
@@ -638,6 +638,22 @@ function parseSubscriptionIdFromReceipt(receipt) {
   }
   // Fallback: return the tx hash or stringified receipt
   return rx?.txHash || rx?.tx_hash || JSON.stringify(receipt)
+}
+
+/**
+ * Extract tx hash from a bridge call-contract receipt.
+ *
+ * The bridge may return:
+ *   - A plain string (tx hash)
+ *   - An object { ok, txHash, blockNumber, gasUsed, status, logs }
+ *   - A nested JSON string of the above
+ */
+function extractTxHash(receipt) {
+  let rx = receipt
+  if (typeof rx === 'string') {
+    try { rx = JSON.parse(rx) } catch { return rx }
+  }
+  return rx?.txHash || rx?.tx_hash || rx?.transactionId || String(receipt)
 }
 
 /**
