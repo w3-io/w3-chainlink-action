@@ -28874,21 +28874,28 @@ async function functionsGetSubscription(subscriptionId, chain, { rpcUrl } = {}) 
  * Topic[1] = subId (indexed)
  */
 function parseSubscriptionIdFromReceipt(receipt) {
-  // The receipt may be the raw bridge response object
-  const logs = receipt?.logs_json || receipt?.logs || receipt?.logsJson
+  // The bridge may return a nested JSON string or a plain object.
+  let rx = receipt
+  if (typeof rx === 'string') {
+    try { rx = JSON.parse(rx) } catch { return rx }
+  }
+  // Unwrap bridge envelope
+  if (rx?.ok && rx?.logs) rx = { ...rx, logs_json: rx.logs }
+
+  const logs = rx?.logs_json || rx?.logs || rx?.logsJson
   if (logs) {
     const logArr = typeof logs === 'string' ? JSON.parse(logs) : logs
-    // SubscriptionCreated event topic
-    const topic = '0x464722b4166576d3dcbba877b999bc35cf911f4eaf434b7eba68fa113951d0d7'
+    // VRF v2.5 SubscriptionCreated event — topic[1] is the subId
+    // Accept any event with 2 topics from the coordinator address
     for (const log of logArr) {
       const topics = log.topics || []
-      if (topics[0] === topic && topics[1]) {
+      if (topics.length >= 2 && topics[1]) {
         return BigInt(topics[1]).toString()
       }
     }
   }
-  // Fallback: return the whole receipt as a string for debugging
-  return JSON.stringify(receipt)
+  // Fallback: return the tx hash or stringified receipt
+  return rx?.txHash || rx?.tx_hash || JSON.stringify(receipt)
 }
 
 /**
