@@ -1,0 +1,53 @@
+name: Chainlink Reads v2
+on:
+  workflow_dispatch: {}
+
+jobs:
+  reads:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: eth-price
+        with:
+          command: get-price
+          pair: ETH/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: btc-price
+        with:
+          command: get-price
+          pair: BTC/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: link-price
+        with:
+          command: get-price
+          pair: LINK/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: feed-info
+        with:
+          command: get-feed-info
+          pair: ETH/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: feeds-list
+        with:
+          command: list-feeds
+          chain: sepolia
+
+      - run: |
+          echo "=== All Results ==="
+          echo "ETH: ${{ steps.eth-price.outputs.result }}"
+          echo "BTC: ${{ steps.btc-price.outputs.result }}"
+          echo "LINK: ${{ steps.link-price.outputs.result }}"
+          echo "Info: ${{ steps.feed-info.outputs.result }}"
+          echo "List: ${{ steps.feeds-list.outputs.result }}"
