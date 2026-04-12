@@ -1,6 +1,6 @@
 # W3 Chainlink Action
 
-Chainlink on-chain primitives for W3 workflows — price feeds, CCIP cross-chain transfers, VRF randomness, proof of reserve, and Functions off-chain compute. 11 commands across 5 products, targeting the full Chainlink-supported chain catalog.
+Chainlink on-chain primitives for W3 workflows — price feeds, CCIP cross-chain transfers, VRF randomness, proof of reserve, and Functions off-chain compute. 13 commands across 5 products, targeting the full Chainlink-supported chain catalog.
 
 ## Quick start
 
@@ -30,8 +30,8 @@ The workflow author says `pair: ETH/USD chain: ethereum` and the action looks up
 | **Price Feeds**      | `get-price`, `get-feed-info`, `list-feeds`                                           |
 | **Proof of Reserve** | `por-get-reserves`                                                                   |
 | **CCIP**             | `ccip-estimate-fee`, `ccip-send`                                                     |
-| **VRF**              | `vrf-create-subscription`, `vrf-get-subscription`, `vrf-add-consumer`, `vrf-request` |
-| **Functions**        | `functions-get-subscription`                                                         |
+| **VRF**              | `vrf-create-subscription`, `vrf-fund-subscription`, `vrf-add-consumer`, `vrf-get-subscription`, `vrf-request` |
+| **Functions**        | `functions-create-subscription`, `functions-get-subscription`                        |
 
 ## Inputs
 

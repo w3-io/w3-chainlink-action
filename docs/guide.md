@@ -160,6 +160,18 @@ Get subscription details — balance, consumers, request count.
 
 **Output:** `{ subscriptionId, chain, coordinator, balance, nativeBalance, requestCount, owner, consumers }`.
 
+### `vrf-fund-subscription`
+
+Fund a VRF subscription with native ETH. Uses `fundSubscriptionWithNative` — no LINK approval needed. **Write operation.**
+
+| Input             | Required | Description                    |
+| ----------------- | -------- | ------------------------------ |
+| `subscription-id` | yes      | Subscription ID                |
+| `amount`          | yes      | Amount in wei (e.g. `10000000000000000` = 0.01 ETH) |
+| `chain`           | yes      | Target chain                   |
+
+**Output:** `{ subscriptionId, amount, txHash, coordinator, chain }`.
+
 ### `vrf-add-consumer`
 
 Whitelist a consumer contract on a subscription. **Write operation.**
@@ -191,6 +203,16 @@ Request random words from VRF v2.5. Returns a request ID for tracking.
 ## Functions
 
 Chainlink Functions provides off-chain computation executed by a Decentralized Oracle Network (DON). Requires a subscription funded with LINK.
+
+### `functions-create-subscription`
+
+Create a new Chainlink Functions subscription. The caller's address becomes the subscription owner. **Write operation.** Requires ToS acceptance on the Functions Router (via [functions.chain.link](https://functions.chain.link)).
+
+| Input   | Required | Description  |
+| ------- | -------- | ------------ |
+| `chain` | yes      | Target chain |
+
+**Output:** `{ subscriptionId, txHash, router, chain }`.
 
 ### `functions-get-subscription`
 
