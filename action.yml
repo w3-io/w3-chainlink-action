@@ -6,13 +6,10 @@ inputs:
   command:
     description: >
       Operation to perform. Price Feeds: get-price, get-feed-info, list-feeds.
-      Proof of Reserve: por-get-reserves. CCIP: ccip-send, ccip-estimate-fee,
-      ccip-wait-for-delivery, ccip-get-message. VRF: vrf-request,
-      vrf-wait-for-fulfillment, vrf-create-subscription, vrf-fund-subscription,
-      vrf-add-consumer, vrf-get-subscription. Functions: functions-request,
-      functions-wait-for-fulfillment, functions-create-subscription,
-      functions-get-subscription. Data Streams: streams-fetch-report,
-      streams-list-feeds.
+      Proof of Reserve: por-get-reserves. CCIP: ccip-send, ccip-estimate-fee.
+      VRF: vrf-create-subscription, vrf-fund-subscription, vrf-add-consumer,
+      vrf-get-subscription, vrf-request. Functions: functions-create-subscription,
+      functions-get-subscription.
     required: true
 
   # Common inputs

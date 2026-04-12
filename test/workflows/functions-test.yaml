@@ -1,4 +1,4 @@
-name: Chainlink Functions Test v1
+name: Chainlink Functions Test v2
 on:
   workflow_dispatch: {}
 

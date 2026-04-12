@@ -8,9 +8,11 @@ import {
   ccipEstimateFee,
   ccipSend,
   vrfCreateSubscription,
+  vrfFundSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
   vrfRequest,
+  functionsCreateSubscription,
   functionsGetSubscription,
   ChainlinkError,
 } from './chainlink.js'
@@ -104,6 +106,18 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'vrf-fund-subscription': async () => {
+    const result = await vrfFundSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        amount: core.getInput('amount', { required: true }),
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
   'vrf-get-subscription': async () => {
     const result = await vrfGetSubscription(
       core.getInput('subscription-id', { required: true }),
@@ -135,6 +149,14 @@ const handlers = {
   },
 
   // ── Functions ─────────────────────────────────────────────────
+
+  'functions-create-subscription': async () => {
+    const result = await functionsCreateSubscription(
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
 
   'functions-get-subscription': async () => {
     const result = await functionsGetSubscription(

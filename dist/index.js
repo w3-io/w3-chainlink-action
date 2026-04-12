@@ -28793,6 +28793,38 @@ async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) 
 }
 
 /**
+ * Fund a VRF subscription with native ETH.
+ *
+ * Uses fundSubscriptionWithNative — avoids the ERC20 approve dance.
+ * The value (in wei) is sent as msg.value.
+ */
+async function vrfFundSubscription(subscriptionId, chain, { amount, rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!amount)
+    throw new ChainlinkError('MISSING_AMOUNT', 'amount is required (in wei)')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.fundSubscription,
+    args: [subscriptionId],
+    value: amount,
+    ...net.params,
+  }, net.network)
+
+  return {
+    subscriptionId,
+    amount,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
  * Request random words from VRF v2.5.
  */
 async function vrfRequest(
@@ -28830,6 +28862,31 @@ async function vrfRequest(
 }
 
 // ── Functions (Chainlink Functions) ────────────────────────────────
+
+/**
+ * Create a Chainlink Functions subscription.
+ */
+async function functionsCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
+  const router = lookupFunctionsRouter(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: router,
+    method: 'function createSubscription() returns (uint64)',
+    args: [],
+    ...net.params,
+  }, net.network)
+
+  // Parse subscription ID from SubscriptionCreated event
+  const subId = parseSubscriptionIdFromReceipt(receipt)
+
+  return {
+    subscriptionId: subId,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    router,
+    chain,
+  }
+}
 
 /**
  * Get a Chainlink Functions subscription.
@@ -29229,6 +29286,18 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'vrf-fund-subscription': async () => {
+    const result = await vrfFundSubscription(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      {
+        amount: lib_core.getInput('amount', { required: true }),
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
   'vrf-get-subscription': async () => {
     const result = await vrfGetSubscription(
       lib_core.getInput('subscription-id', { required: true }),
@@ -29260,6 +29329,14 @@ const handlers = {
   },
 
   // ── Functions ─────────────────────────────────────────────────
+
+  'functions-create-subscription': async () => {
+    const result = await functionsCreateSubscription(
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
 
   'functions-get-subscription': async () => {
     const result = await functionsGetSubscription(

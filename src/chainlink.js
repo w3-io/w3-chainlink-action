@@ -455,6 +455,38 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl }
 }
 
 /**
+ * Fund a VRF subscription with native ETH.
+ *
+ * Uses fundSubscriptionWithNative — avoids the ERC20 approve dance.
+ * The value (in wei) is sent as msg.value.
+ */
+export async function vrfFundSubscription(subscriptionId, chain, { amount, rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!amount)
+    throw new ChainlinkError('MISSING_AMOUNT', 'amount is required (in wei)')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.fundSubscription,
+    args: [subscriptionId],
+    value: amount,
+    ...net.params,
+  }, net.network)
+
+  return {
+    subscriptionId,
+    amount,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
  * Request random words from VRF v2.5.
  */
 export async function vrfRequest(
@@ -492,6 +524,31 @@ export async function vrfRequest(
 }
 
 // ── Functions (Chainlink Functions) ────────────────────────────────
+
+/**
+ * Create a Chainlink Functions subscription.
+ */
+export async function functionsCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
+  const router = lookupFunctionsRouter(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: router,
+    method: 'function createSubscription() returns (uint64)',
+    args: [],
+    ...net.params,
+  }, net.network)
+
+  // Parse subscription ID from SubscriptionCreated event
+  const subId = parseSubscriptionIdFromReceipt(receipt)
+
+  return {
+    subscriptionId: subId,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    router,
+    chain,
+  }
+}
 
 /**
  * Get a Chainlink Functions subscription.
