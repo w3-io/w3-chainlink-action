@@ -288,14 +288,14 @@ export async function getReserves(feed, chain, { rpcUrl } = {}) {
 export async function ccipEstimateFee(
   sourceChain,
   destinationChain,
-  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native' } = {},
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', rpcUrl } = {},
 ) {
   if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
   if (!destinationChain)
     throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
   if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
 
-  const srcNet = resolveNetwork(sourceChain)
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
   const router = lookupCcipRouter(sourceChain)
   const destSelector = lookupCcipSelector(destinationChain)
   const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
@@ -303,7 +303,7 @@ export async function ccipEstimateFee(
   // Build the EVM2AnyMessage struct
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken)
 
-    const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+  const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method: CCIP_INTERFACE.getFee,
     args: [destSelector, message],
@@ -329,14 +329,14 @@ export async function ccipEstimateFee(
 export async function ccipSend(
   sourceChain,
   destinationChain,
-  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', gasLimit = '200000' } = {},
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', gasLimit = '200000', rpcUrl } = {},
 ) {
   if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
   if (!destinationChain)
     throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
   if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
 
-  const srcNet = resolveNetwork(sourceChain)
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
   const router = lookupCcipRouter(sourceChain)
   const destSelector = lookupCcipSelector(destinationChain)
   const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
@@ -365,8 +365,8 @@ export async function ccipSend(
 /**
  * Create a new VRF subscription.
  */
-export async function vrfCreateSubscription(chain) {
-  const net = resolveNetwork(chain)
+export async function vrfCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   const subId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
@@ -382,11 +382,11 @@ export async function vrfCreateSubscription(chain) {
 /**
  * Get VRF subscription details.
  */
-export async function vrfGetSubscription(subscriptionId, chain) {
+export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
@@ -418,12 +418,12 @@ export async function vrfGetSubscription(subscriptionId, chain) {
 /**
  * Add a consumer contract to a VRF subscription.
  */
-export async function vrfAddConsumer(subscriptionId, consumer, chain) {
+export async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
   if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
@@ -441,12 +441,12 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain) {
  */
 export async function vrfRequest(
   chain,
-  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3 } = {},
+  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3, rpcUrl } = {},
 ) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
   const keyHash = lookupVrfKeyHash(chain)
 
@@ -478,11 +478,11 @@ export async function vrfRequest(
 /**
  * Get a Chainlink Functions subscription.
  */
-export async function functionsGetSubscription(subscriptionId, chain) {
+export async function functionsGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const router = lookupFunctionsRouter(chain)
 
   // Functions uses a different getSubscription signature than VRF

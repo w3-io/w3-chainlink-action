@@ -40,6 +40,7 @@ const handlers = {
     const result = await getFeedInfo(
       core.getInput('pair', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -55,6 +56,7 @@ const handlers = {
     const result = await getReserves(
       core.getInput('pair', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -70,6 +72,7 @@ const handlers = {
         receiver: core.getInput('receiver', { required: true }),
         tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
         feeToken: core.getInput('fee-token') || 'native',
+        rpcUrl: core.getInput('rpc-url') || undefined,
       },
     )
     setJsonOutput('result', result)
@@ -85,6 +88,7 @@ const handlers = {
         tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
         feeToken: core.getInput('fee-token') || 'native',
         gasLimit: core.getInput('gas-limit') || '200000',
+        rpcUrl: core.getInput('rpc-url') || undefined,
       },
     )
     setJsonOutput('result', result)
@@ -93,7 +97,10 @@ const handlers = {
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
-    const result = await vrfCreateSubscription(core.getInput('chain', { required: true }))
+    const result = await vrfCreateSubscription(
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
     setJsonOutput('result', result)
   },
 
@@ -101,6 +108,7 @@ const handlers = {
     const result = await vrfGetSubscription(
       core.getInput('subscription-id', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -110,6 +118,7 @@ const handlers = {
       core.getInput('subscription-id', { required: true }),
       core.getInput('consumer-contract', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -120,6 +129,7 @@ const handlers = {
       numWords: Number(core.getInput('num-words')) || 1,
       callbackGasLimit: Number(core.getInput('callback-gas-limit')) || 100000,
       requestConfirmations: Number(core.getInput('request-confirmations')) || 3,
+      rpcUrl: core.getInput('rpc-url') || undefined,
     })
     setJsonOutput('result', result)
   },
@@ -130,6 +140,7 @@ const handlers = {
     const result = await functionsGetSubscription(
       core.getInput('subscription-id', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
