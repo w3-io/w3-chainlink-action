@@ -489,7 +489,7 @@ export async function functionsGetSubscription(subscriptionId, chain, { rpcUrl }
   const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method:
-      'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
+      'function getSubscription(uint64) returns (uint96, address, uint64, address[])',
     args: [subscriptionId],
     ...net.params,
   }, net.network))
@@ -631,13 +631,16 @@ function resolveFeeToken(feeToken, sourceChain) {
  * Build the CCIP EVM2AnyMessage struct for bridge calls.
  */
 function buildCcipMessage(receiver, data, tokenAmounts, feeToken, _gasLimit) {
-  return {
-    receiver,
-    data: data || '0x',
-    tokenAmounts: tokenAmounts.map((ta) => ({ token: ta.token, amount: String(ta.amount) })),
-    feeToken,
-    extraArgs: '0x',
-  }
+  // CCIP receiver is bytes — for EVM destinations, ABI-encode the address to 32 bytes
+  const encodedReceiver = '0x' + receiver.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+  // Return as positional tuple matching (bytes, bytes, (address, uint256)[], address, bytes)
+  return [
+    encodedReceiver,                                                   // bytes receiver
+    data || '0x',                                                      // bytes data
+    tokenAmounts.map((ta) => [ta.token, String(ta.amount)]),           // (address, uint256)[]
+    feeToken,                                                          // address feeToken
+    '0x',                                                              // bytes extraArgs
+  ]
 }
 
 /**

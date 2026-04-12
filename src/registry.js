@@ -225,10 +225,11 @@ export const LINK_TOKENS = {
  * CCIP interface functions.
  */
 export const CCIP_INTERFACE = {
+  // Tuple field names stripped — alloy's parser requires unnamed tuple components
   getFee:
-    'function getFee(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external view returns (uint256)',
+    'function getFee(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) returns (uint256)',
   ccipSend:
-    'function ccipSend(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external payable returns (bytes32)',
+    'function ccipSend(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) payable returns (bytes32)',
 }
 
 // ── VRF v2.5 configuration ─────────────────────────────────────────
@@ -254,14 +255,14 @@ export const VRF = {
 }
 
 export const VRF_INTERFACE = {
-  createSubscription: 'function createSubscription() external returns (uint256 subId)',
-  addConsumer: 'function addConsumer(uint256 subId, address consumer) external',
-  removeConsumer: 'function removeConsumer(uint256 subId, address consumer) external',
+  createSubscription: 'function createSubscription() returns (uint256)',
+  addConsumer: 'function addConsumer(uint256, address)',
+  removeConsumer: 'function removeConsumer(uint256, address)',
   getSubscription:
-    'function getSubscription(uint256 subId) external view returns (uint96 balance, uint96 nativeBalance, uint64 reqCount, address subOwner, address[] memory consumers)',
+    'function getSubscription(uint256) returns (uint96, uint96, uint64, address, address[])',
   requestRandomWords:
-    'function requestRandomWords(bytes32 keyHash, uint256 subId, uint16 requestConfirmations, uint32 callbackGasLimit, uint32 numWords, bytes extraArgs) external returns (uint256 requestId)',
-  fundSubscription: 'function fundSubscriptionWithNative(uint256 subId) external payable',
+    'function requestRandomWords(bytes32, uint256, uint16, uint32, uint32, bytes) returns (uint256)',
+  fundSubscription: 'function fundSubscriptionWithNative(uint256) payable',
 }
 
 // ── Functions configuration ────────────────────────────────────────

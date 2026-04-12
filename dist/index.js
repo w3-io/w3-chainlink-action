@@ -28222,10 +28222,11 @@ const LINK_TOKENS = {
  * CCIP interface functions.
  */
 const CCIP_INTERFACE = {
+  // Tuple field names stripped — alloy's parser requires unnamed tuple components
   getFee:
-    'function getFee(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external view returns (uint256)',
+    'function getFee(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) returns (uint256)',
   ccipSend:
-    'function ccipSend(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external payable returns (bytes32)',
+    'function ccipSend(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) payable returns (bytes32)',
 }
 
 // ── VRF v2.5 configuration ─────────────────────────────────────────
@@ -28251,14 +28252,14 @@ const VRF = {
 }
 
 const VRF_INTERFACE = {
-  createSubscription: 'function createSubscription() external returns (uint256 subId)',
-  addConsumer: 'function addConsumer(uint256 subId, address consumer) external',
-  removeConsumer: 'function removeConsumer(uint256 subId, address consumer) external',
+  createSubscription: 'function createSubscription() returns (uint256)',
+  addConsumer: 'function addConsumer(uint256, address)',
+  removeConsumer: 'function removeConsumer(uint256, address)',
   getSubscription:
-    'function getSubscription(uint256 subId) external view returns (uint96 balance, uint96 nativeBalance, uint64 reqCount, address subOwner, address[] memory consumers)',
+    'function getSubscription(uint256) returns (uint96, uint96, uint64, address, address[])',
   requestRandomWords:
-    'function requestRandomWords(bytes32 keyHash, uint256 subId, uint16 requestConfirmations, uint32 callbackGasLimit, uint32 numWords, bytes extraArgs) external returns (uint256 requestId)',
-  fundSubscription: 'function fundSubscriptionWithNative(uint256 subId) external payable',
+    'function requestRandomWords(bytes32, uint256, uint16, uint32, uint32, bytes) returns (uint256)',
+  fundSubscription: 'function fundSubscriptionWithNative(uint256) payable',
 }
 
 // ── Functions configuration ────────────────────────────────────────
@@ -28770,7 +28771,7 @@ async function functionsGetSubscription(subscriptionId, chain, { rpcUrl } = {}) 
   const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method:
-      'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
+      'function getSubscription(uint64) returns (uint96, address, uint64, address[])',
     args: [subscriptionId],
     ...net.params,
   }, net.network))
@@ -28912,13 +28913,16 @@ function resolveFeeToken(feeToken, sourceChain) {
  * Build the CCIP EVM2AnyMessage struct for bridge calls.
  */
 function buildCcipMessage(receiver, data, tokenAmounts, feeToken, _gasLimit) {
-  return {
-    receiver,
-    data: data || '0x',
-    tokenAmounts: tokenAmounts.map((ta) => ({ token: ta.token, amount: String(ta.amount) })),
-    feeToken,
-    extraArgs: '0x',
-  }
+  // CCIP receiver is bytes — for EVM destinations, ABI-encode the address to 32 bytes
+  const encodedReceiver = '0x' + receiver.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+  // Return as positional tuple matching (bytes, bytes, (address, uint256)[], address, bytes)
+  return [
+    encodedReceiver,                                                   // bytes receiver
+    data || '0x',                                                      // bytes data
+    tokenAmounts.map((ta) => [ta.token, String(ta.amount)]),           // (address, uint256)[]
+    feeToken,                                                          // address feeToken
+    '0x',                                                              // bytes extraArgs
+  ]
 }
 
 /**
