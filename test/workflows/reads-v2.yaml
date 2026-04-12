@@ -6,6 +6,7 @@ jobs:
   reads:
     runs-on: ubuntu-latest
     steps:
+      # ── Price Feeds ──────────────────────────────────────────
       - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
         id: eth-price
         with:
@@ -44,10 +45,26 @@ jobs:
           command: list-feeds
           chain: sepolia
 
+      # ── CCIP ─────────────────────────────────────────────────
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: ccip-fee
+        with:
+          command: ccip-estimate-fee
+          source-chain: sepolia
+          destination-chain: base-sepolia
+          receiver: '0x5bC6a8220Fd1645970B467092896B5f98bc339dC'
+          fee-token: native
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      # ── Summary ──────────────────────────────────────────────
       - run: |
-          echo "=== All Results ==="
+          echo "=== Price Feeds ==="
           echo "ETH: ${{ steps.eth-price.outputs.result }}"
           echo "BTC: ${{ steps.btc-price.outputs.result }}"
           echo "LINK: ${{ steps.link-price.outputs.result }}"
+          echo "=== Feed Info ==="
           echo "Info: ${{ steps.feed-info.outputs.result }}"
+          echo "=== List Feeds ==="
           echo "List: ${{ steps.feeds-list.outputs.result }}"
+          echo "=== CCIP ==="
+          echo "Fee: ${{ steps.ccip-fee.outputs.result }}"

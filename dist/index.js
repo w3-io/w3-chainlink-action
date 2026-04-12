@@ -28569,14 +28569,14 @@ async function getReserves(feed, chain, { rpcUrl } = {}) {
 async function ccipEstimateFee(
   sourceChain,
   destinationChain,
-  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native' } = {},
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', rpcUrl } = {},
 ) {
   if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
   if (!destinationChain)
     throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
   if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
 
-  const srcNet = resolveNetwork(sourceChain)
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
   const router = lookupCcipRouter(sourceChain)
   const destSelector = lookupCcipSelector(destinationChain)
   const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
@@ -28584,7 +28584,7 @@ async function ccipEstimateFee(
   // Build the EVM2AnyMessage struct
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken)
 
-    const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+  const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method: CCIP_INTERFACE.getFee,
     args: [destSelector, message],
@@ -28610,14 +28610,14 @@ async function ccipEstimateFee(
 async function ccipSend(
   sourceChain,
   destinationChain,
-  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', gasLimit = '200000' } = {},
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', gasLimit = '200000', rpcUrl } = {},
 ) {
   if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
   if (!destinationChain)
     throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
   if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
 
-  const srcNet = resolveNetwork(sourceChain)
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
   const router = lookupCcipRouter(sourceChain)
   const destSelector = lookupCcipSelector(destinationChain)
   const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
@@ -28646,8 +28646,8 @@ async function ccipSend(
 /**
  * Create a new VRF subscription.
  */
-async function vrfCreateSubscription(chain) {
-  const net = resolveNetwork(chain)
+async function vrfCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   const subId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
@@ -28663,11 +28663,11 @@ async function vrfCreateSubscription(chain) {
 /**
  * Get VRF subscription details.
  */
-async function vrfGetSubscription(subscriptionId, chain) {
+async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
@@ -28699,12 +28699,12 @@ async function vrfGetSubscription(subscriptionId, chain) {
 /**
  * Add a consumer contract to a VRF subscription.
  */
-async function vrfAddConsumer(subscriptionId, consumer, chain) {
+async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
   if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
   unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
@@ -28722,12 +28722,12 @@ async function vrfAddConsumer(subscriptionId, consumer, chain) {
  */
 async function vrfRequest(
   chain,
-  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3 } = {},
+  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3, rpcUrl } = {},
 ) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
   const keyHash = lookupVrfKeyHash(chain)
 
@@ -28759,11 +28759,11 @@ async function vrfRequest(
 /**
  * Get a Chainlink Functions subscription.
  */
-async function functionsGetSubscription(subscriptionId, chain) {
+async function functionsGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
   if (!subscriptionId)
     throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const router = lookupFunctionsRouter(chain)
 
   // Functions uses a different getSubscription signature than VRF
@@ -29035,6 +29035,7 @@ const handlers = {
     const result = await getFeedInfo(
       lib_core.getInput('pair', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -29050,6 +29051,7 @@ const handlers = {
     const result = await getReserves(
       lib_core.getInput('pair', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -29065,6 +29067,7 @@ const handlers = {
         receiver: lib_core.getInput('receiver', { required: true }),
         tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
         feeToken: lib_core.getInput('fee-token') || 'native',
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
       },
     )
     setJsonOutput('result', result)
@@ -29080,6 +29083,7 @@ const handlers = {
         tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
         feeToken: lib_core.getInput('fee-token') || 'native',
         gasLimit: lib_core.getInput('gas-limit') || '200000',
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
       },
     )
     setJsonOutput('result', result)
@@ -29088,7 +29092,10 @@ const handlers = {
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
-    const result = await vrfCreateSubscription(lib_core.getInput('chain', { required: true }))
+    const result = await vrfCreateSubscription(
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
     setJsonOutput('result', result)
   },
 
@@ -29096,6 +29103,7 @@ const handlers = {
     const result = await vrfGetSubscription(
       lib_core.getInput('subscription-id', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -29105,6 +29113,7 @@ const handlers = {
       lib_core.getInput('subscription-id', { required: true }),
       lib_core.getInput('consumer-contract', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
@@ -29115,6 +29124,7 @@ const handlers = {
       numWords: Number(lib_core.getInput('num-words')) || 1,
       callbackGasLimit: Number(lib_core.getInput('callback-gas-limit')) || 100000,
       requestConfirmations: Number(lib_core.getInput('request-confirmations')) || 3,
+      rpcUrl: lib_core.getInput('rpc-url') || undefined,
     })
     setJsonOutput('result', result)
   },
@@ -29125,6 +29135,7 @@ const handlers = {
     const result = await functionsGetSubscription(
       lib_core.getInput('subscription-id', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
