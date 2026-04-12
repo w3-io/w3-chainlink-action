@@ -28221,12 +28221,69 @@ const LINK_TOKENS = {
 /**
  * CCIP interface functions.
  */
+// Full ABI JSON for CCIP Router — required because the bridge's DynSolType
+// cannot resolve bare 'tuple' types from signature-parsed Function params.
+// The JSON ABI preserves the components array, enabling proper encoding.
+const CCIP_ABI = JSON.stringify([
+  {
+    name: 'getFee',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'destinationChainSelector', type: 'uint64' },
+      {
+        name: 'message',
+        type: 'tuple',
+        components: [
+          { name: 'receiver', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+          {
+            name: 'tokenAmounts',
+            type: 'tuple[]',
+            components: [
+              { name: 'token', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+          },
+          { name: 'feeToken', type: 'address' },
+          { name: 'extraArgs', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'fee', type: 'uint256' }],
+  },
+  {
+    name: 'ccipSend',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'destinationChainSelector', type: 'uint64' },
+      {
+        name: 'message',
+        type: 'tuple',
+        components: [
+          { name: 'receiver', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+          {
+            name: 'tokenAmounts',
+            type: 'tuple[]',
+            components: [
+              { name: 'token', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+          },
+          { name: 'feeToken', type: 'address' },
+          { name: 'extraArgs', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'messageId', type: 'bytes32' }],
+  },
+])
+
 const CCIP_INTERFACE = {
-  // Tuple field names stripped — alloy's parser requires unnamed tuple components
-  getFee:
-    'function getFee(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) returns (uint256)',
-  ccipSend:
-    'function ccipSend(uint64, (bytes, bytes, (address, uint256)[], address, bytes)) payable returns (bytes32)',
+  getFee: 'getFee',
+  ccipSend: 'ccipSend',
 }
 
 // ── VRF v2.5 configuration ─────────────────────────────────────────
@@ -28588,6 +28645,7 @@ async function ccipEstimateFee(
   const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method: CCIP_INTERFACE.getFee,
+    abi: CCIP_ABI,
     args: [destSelector, message],
     ...srcNet.params,
   }, srcNet.network))
@@ -28628,6 +28686,7 @@ async function ccipSend(
   const messageId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: router,
     method: CCIP_INTERFACE.ccipSend,
+    abi: CCIP_ABI,
     args: [destSelector, message],
     ...srcNet.params,
   }, srcNet.network))

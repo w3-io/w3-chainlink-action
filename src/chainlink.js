@@ -29,6 +29,7 @@ import {
   NETWORKS,
   POR_FEEDS,
   CCIP,
+  CCIP_ABI,
   CCIP_INTERFACE,
   LINK_TOKENS,
   VRF,
@@ -306,6 +307,7 @@ export async function ccipEstimateFee(
   const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method: CCIP_INTERFACE.getFee,
+    abi: CCIP_ABI,
     args: [destSelector, message],
     ...srcNet.params,
   }, srcNet.network))
@@ -346,6 +348,7 @@ export async function ccipSend(
   const messageId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: router,
     method: CCIP_INTERFACE.ccipSend,
+    abi: CCIP_ABI,
     args: [destSelector, message],
     ...srcNet.params,
   }, srcNet.network))
