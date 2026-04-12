@@ -111,7 +111,7 @@ describe('ccipEstimateFee', () => {
 
 describe('ccipSend', () => {
   it('calls ccipSend on the router and returns a tx hash', async () => {
-    mockBridge([{ value: { tx_hash: '0xabcdef1234567890' } }])
+    mockBridge([{ value: '500000000000000' }, { value: { tx_hash: '0xabcdef1234567890' } }])
 
     const result = await ccipSend('ethereum', 'arbitrum', {
       receiver: '0xRecipient',
@@ -123,25 +123,27 @@ describe('ccipSend', () => {
     assert.equal(result.sourceChain, 'ethereum')
     assert.equal(result.destinationChain, 'arbitrum')
 
-    // Verify it was a write call
-    assert.equal(bridgeCalls[0].operation, 'call-contract')
+    // bridgeCalls[0] = getFee (read), bridgeCalls[1] = ccipSend (write)
+    assert.equal(bridgeCalls[0].operation, 'read-contract')
+    assert.equal(bridgeCalls[1].operation, 'call-contract')
   })
 
   it('formats token amounts as strings', async () => {
-    mockBridge([{ value: { tx_hash: '0x123' } }])
+    mockBridge([{ value: '100000000000000' }, { value: { tx_hash: '0x123' } }])
 
     await ccipSend('sepolia', 'arbitrum-sepolia', {
       receiver: '0xRecipient',
       tokenAmounts: [{ token: '0xToken', amount: 500 }],
     })
 
-    const args = bridgeCalls[0].params.args
+    // bridgeCalls[0] = getFee, bridgeCalls[1] = ccipSend
+    const args = bridgeCalls[1].params.args
     // args[1] is a parenthesized tuple string for coerce_str
     assert.ok(args[1].includes('500'))
   })
 
   it('sends with empty tokenAmounts for message-only transfers', async () => {
-    mockBridge([{ value: { tx_hash: '0x456' } }])
+    mockBridge([{ value: '200000000000000' }, { value: { tx_hash: '0x456' } }])
 
     const result = await ccipSend('ethereum', 'base', {
       receiver: '0xRecipient',
@@ -149,20 +151,22 @@ describe('ccipSend', () => {
     })
 
     assert.equal(result.status, 'sent')
-    const args = bridgeCalls[0].params.args
+    // bridgeCalls[0] = getFee, bridgeCalls[1] = ccipSend
+    const args = bridgeCalls[1].params.args
     // args[1] is a tuple string with empty tokenAmounts: [..., [], ...]
     assert.ok(args[1].includes('[]'))
   })
 
   it('uses the correct testnet router and selector', async () => {
-    mockBridge([{ value: { tx_hash: '0x789' } }])
+    mockBridge([{ value: '300000000000000' }, { value: { tx_hash: '0x789' } }])
 
     await ccipSend('sepolia', 'fuji', {
       receiver: '0xRecipient',
     })
 
-    assert.equal(bridgeCalls[0].params.contract, '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59')
-    const args = bridgeCalls[0].params.args
+    // bridgeCalls[0] = getFee, bridgeCalls[1] = ccipSend
+    assert.equal(bridgeCalls[1].params.contract, '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59')
+    const args = bridgeCalls[1].params.args
     assert.equal(args[0], '14767482510784806043') // fuji selector
   })
 })
