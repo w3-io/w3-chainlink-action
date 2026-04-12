@@ -100,7 +100,7 @@ describe('vrfAddConsumer', () => {
     assert.equal(result.subscriptionId, '42')
     assert.equal(result.consumer, '0xMyContract')
     assert.equal(bridgeCalls[0].operation, 'call-contract')
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    const args = bridgeCalls[0].params.args
     assert.equal(args[0], '42')
     assert.equal(args[1], '0xMyContract')
   })
@@ -130,7 +130,7 @@ describe('vrfRequest', () => {
     assert.equal(bridgeCalls[0].operation, 'call-contract')
 
     // Verify the args include the key hash and sub ID
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    const args = bridgeCalls[0].params.args
     assert.equal(args[0], '0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae') // sepolia key hash
     assert.equal(args[1], '42') // subscription ID
     assert.equal(args[2], 5) // request confirmations
@@ -144,7 +144,7 @@ describe('vrfRequest', () => {
     const result = await vrfRequest('sepolia', { subscriptionId: '1' })
 
     assert.equal(result.numWords, 1)
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    const args = bridgeCalls[0].params.args
     assert.equal(args[2], 3) // default confirmations
     assert.equal(args[3], 100000) // default gas limit
     assert.equal(args[4], 1) // default num words

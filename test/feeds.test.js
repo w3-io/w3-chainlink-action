@@ -80,10 +80,7 @@ describe('getPrice', () => {
 
     await getPrice('BTC/USD', 'sepolia')
 
-    assert.equal(
-      bridgeCalls[0].params.contractAddress,
-      '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43',
-    )
+    assert.equal(bridgeCalls[0].params.contract, '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43')
   })
 
   it('throws MISSING_PAIR when pair is empty', async () => {

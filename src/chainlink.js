@@ -81,18 +81,18 @@ export async function getPrice(pair, chain) {
 
   // Read decimals first so we can format the answer
   const decimalsResult = await bridge.chain('ethereum', 'read-contract', {
-    contractAddress: feedAddress,
-    functionSignature: FEED_INTERFACE.decimals,
-    args: '[]',
+    contract: feedAddress,
+    method: FEED_INTERFACE.decimals,
+    args: [],
     ...net.bridgeParams,
   })
   const feedDecimals = parseInt(decimalsResult, 10)
 
   // Read latest round data
   const roundData = await bridge.chain('ethereum', 'read-contract', {
-    contractAddress: feedAddress,
-    functionSignature: FEED_INTERFACE.latestRoundData,
-    args: '[]',
+    contract: feedAddress,
+    method: FEED_INTERFACE.latestRoundData,
+    args: [],
     ...net.bridgeParams,
   })
 
@@ -124,15 +124,15 @@ export async function getFeedInfo(pair, chain) {
 
   const [description, decimalsResult] = await Promise.all([
     bridge.chain('ethereum', 'read-contract', {
-      contractAddress: feedAddress,
-      functionSignature: FEED_INTERFACE.description,
-      args: '[]',
+      contract: feedAddress,
+      method: FEED_INTERFACE.description,
+      args: [],
       ...net.bridgeParams,
     }),
     bridge.chain('ethereum', 'read-contract', {
-      contractAddress: feedAddress,
-      functionSignature: FEED_INTERFACE.decimals,
-      args: '[]',
+      contract: feedAddress,
+      method: FEED_INTERFACE.decimals,
+      args: [],
       ...net.bridgeParams,
     }),
   ])
@@ -187,21 +187,21 @@ export async function getReserves(feed, chain) {
 
   const [decimalsResult, roundData, description] = await Promise.all([
     bridge.chain('ethereum', 'read-contract', {
-      contractAddress: feedAddress,
-      functionSignature: FEED_INTERFACE.decimals,
-      args: '[]',
+      contract: feedAddress,
+      method: FEED_INTERFACE.decimals,
+      args: [],
       ...net.bridgeParams,
     }),
     bridge.chain('ethereum', 'read-contract', {
-      contractAddress: feedAddress,
-      functionSignature: FEED_INTERFACE.latestRoundData,
-      args: '[]',
+      contract: feedAddress,
+      method: FEED_INTERFACE.latestRoundData,
+      args: [],
       ...net.bridgeParams,
     }),
     bridge.chain('ethereum', 'read-contract', {
-      contractAddress: feedAddress,
-      functionSignature: FEED_INTERFACE.description,
-      args: '[]',
+      contract: feedAddress,
+      method: FEED_INTERFACE.description,
+      args: [],
       ...net.bridgeParams,
     }),
   ])
@@ -254,9 +254,9 @@ export async function ccipEstimateFee(
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken)
 
   const fee = await bridge.chain('ethereum', 'read-contract', {
-    contractAddress: router,
-    functionSignature: CCIP_INTERFACE.getFee,
-    args: JSON.stringify([destSelector, message]),
+    contract: router,
+    method: CCIP_INTERFACE.getFee,
+    args: [destSelector, message],
     ...srcNet.bridgeParams,
   })
 
@@ -294,9 +294,9 @@ export async function ccipSend(
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken, gasLimit)
 
   const messageId = await bridge.chain('ethereum', 'call-contract', {
-    contractAddress: router,
-    functionSignature: CCIP_INTERFACE.ccipSend,
-    args: JSON.stringify([destSelector, message]),
+    contract: router,
+    method: CCIP_INTERFACE.ccipSend,
+    args: [destSelector, message],
     ...srcNet.bridgeParams,
   })
 
@@ -320,9 +320,9 @@ export async function vrfCreateSubscription(chain) {
   const coordinator = lookupVrfCoordinator(chain)
 
   const subId = await bridge.chain('ethereum', 'call-contract', {
-    contractAddress: coordinator,
-    functionSignature: VRF_INTERFACE.createSubscription,
-    args: '[]',
+    contract: coordinator,
+    method: VRF_INTERFACE.createSubscription,
+    args: [],
     ...net.bridgeParams,
   })
 
@@ -340,9 +340,9 @@ export async function vrfGetSubscription(subscriptionId, chain) {
   const coordinator = lookupVrfCoordinator(chain)
 
   const sub = await bridge.chain('ethereum', 'read-contract', {
-    contractAddress: coordinator,
-    functionSignature: VRF_INTERFACE.getSubscription,
-    args: JSON.stringify([subscriptionId]),
+    contract: coordinator,
+    method: VRF_INTERFACE.getSubscription,
+    args: [subscriptionId],
     ...net.bridgeParams,
   })
 
@@ -377,9 +377,9 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain) {
   const coordinator = lookupVrfCoordinator(chain)
 
   await bridge.chain('ethereum', 'call-contract', {
-    contractAddress: coordinator,
-    functionSignature: VRF_INTERFACE.addConsumer,
-    args: JSON.stringify([subscriptionId, consumer]),
+    contract: coordinator,
+    method: VRF_INTERFACE.addConsumer,
+    args: [subscriptionId, consumer],
     ...net.bridgeParams,
   })
 
@@ -401,16 +401,16 @@ export async function vrfRequest(
   const keyHash = lookupVrfKeyHash(chain)
 
   const requestId = await bridge.chain('ethereum', 'call-contract', {
-    contractAddress: coordinator,
-    functionSignature: VRF_INTERFACE.requestRandomWords,
-    args: JSON.stringify([
+    contract: coordinator,
+    method: VRF_INTERFACE.requestRandomWords,
+    args: [
       keyHash,
       subscriptionId,
       requestConfirmations,
       callbackGasLimit,
       numWords,
       '0x', // extraArgs (empty = pay in LINK)
-    ]),
+    ],
     ...net.bridgeParams,
   })
 
@@ -437,10 +437,10 @@ export async function functionsGetSubscription(subscriptionId, chain) {
 
   // Functions uses a different getSubscription signature than VRF
   const sub = await bridge.chain('ethereum', 'read-contract', {
-    contractAddress: router,
-    functionSignature:
+    contract: router,
+    method:
       'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
-    args: JSON.stringify([subscriptionId]),
+    args: [subscriptionId],
     ...net.bridgeParams,
   })
 

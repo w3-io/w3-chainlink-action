@@ -48,10 +48,7 @@ describe('ccipEstimateFee', () => {
 
     // Verify bridge call
     assert.equal(bridgeCalls[0].operation, 'read-contract')
-    assert.equal(
-      bridgeCalls[0].params.contractAddress,
-      '0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D',
-    )
+    assert.equal(bridgeCalls[0].params.contract, '0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D')
   })
 
   it('resolves "link" feeToken to the LINK address', async () => {
@@ -141,7 +138,7 @@ describe('ccipSend', () => {
       tokenAmounts: [{ token: '0xToken', amount: 500 }],
     })
 
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    const args = bridgeCalls[0].params.args
     assert.equal(args[1].tokenAmounts[0].amount, '500')
   })
 
@@ -154,7 +151,7 @@ describe('ccipSend', () => {
     })
 
     assert.equal(result.status, 'sent')
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    const args = bridgeCalls[0].params.args
     assert.deepEqual(args[1].tokenAmounts, [])
   })
 
@@ -165,11 +162,8 @@ describe('ccipSend', () => {
       receiver: '0xRecipient',
     })
 
-    assert.equal(
-      bridgeCalls[0].params.contractAddress,
-      '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59',
-    )
-    const args = JSON.parse(bridgeCalls[0].params.args)
+    assert.equal(bridgeCalls[0].params.contract, '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59')
+    const args = bridgeCalls[0].params.args
     assert.equal(args[0], '14767482510784806043') // fuji selector
   })
 })
