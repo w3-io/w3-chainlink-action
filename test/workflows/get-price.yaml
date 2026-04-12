@@ -1,0 +1,18 @@
+name: Chainlink Price Test
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: price
+        with:
+          command: get-price
+          pair: ETH/USD
+          chain: sepolia
+
+      - run: |
+          echo "Price result:"
+          echo '${{ steps.price.outputs.result }}'

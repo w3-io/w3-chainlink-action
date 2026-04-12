@@ -46,8 +46,14 @@ export const NETWORKS = {
   polygon: { bridgeParams: { network: 'polygon' }, chainName: 'polygon', chainId: 137 },
   avalanche: { bridgeParams: { network: 'avalanche' }, chainName: 'avalanche', chainId: 43114 },
 
-  // Testnets
-  sepolia: { bridgeParams: { network: 'sepolia' }, chainName: 'sepolia', chainId: 11155111 },
+  // Testnets — the bridge network name must match the protocol's
+  // KNOWN_CHAINS keys (e.g. "ethereum-sepolia", not just "sepolia").
+  // The user-facing name stays short; the mapping happens here.
+  sepolia: {
+    bridgeParams: { network: 'ethereum-sepolia' },
+    chainName: 'sepolia',
+    chainId: 11155111,
+  },
   'base-sepolia': {
     bridgeParams: { network: 'base-sepolia' },
     chainName: 'base-sepolia',
@@ -58,8 +64,16 @@ export const NETWORKS = {
     chainName: 'arbitrum-sepolia',
     chainId: 421614,
   },
-  fuji: { bridgeParams: { network: 'fuji' }, chainName: 'fuji', chainId: 43113 },
-  amoy: { bridgeParams: { network: 'amoy' }, chainName: 'amoy', chainId: 80002 },
+  fuji: {
+    bridgeParams: { network: 'avalanche-fuji' },
+    chainName: 'fuji',
+    chainId: 43113,
+  },
+  amoy: {
+    bridgeParams: { network: 'polygon-amoy' },
+    chainName: 'amoy',
+    chainId: 80002,
+  },
 }
 
 // ── Price Feed addresses ───────────────────────────────────────────
