@@ -47,29 +47,31 @@ export class ChainlinkError extends W3ActionError {
 }
 
 /**
- * Resolve a chain name to its network identifier + bridge params.
- * If rpcUrl is provided, it's included in the bridge params so the
- * bridge uses it instead of its built-in default.
+ * Resolve a chain name to its bridge network name and optional params.
+ *
+ * bridge.chain() takes 4 args: (chainFamily, action, params, network).
+ * The network (4th arg) is what the bridge uses for RPC resolution.
+ * The params (3rd arg) contain contract, method, args, and optionally rpcUrl.
+ *
+ * Returns { network, params } where:
+ *   - network: the bridge network name (e.g. "ethereum-sepolia")
+ *   - params: extra params to merge into each bridge call (e.g. { rpcUrl })
  */
 function resolveNetwork(chain, rpcUrl) {
   if (!chain) {
     throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
   }
-  const network = NETWORKS[chain.toLowerCase()]
-  if (!network) {
+  const config = NETWORKS[chain.toLowerCase()]
+  if (!config) {
     throw new ChainlinkError(
       'UNSUPPORTED_CHAIN',
       `Chain "${chain}" is not supported. Available: ${Object.keys(NETWORKS).join(', ')}`,
     )
   }
-  // If rpcUrl is provided, merge it into the bridge params
-  if (rpcUrl) {
-    return {
-      ...network,
-      bridgeParams: { ...network.bridgeParams, rpcUrl },
-    }
+  return {
+    network: config.bridgeParams?.network || chain.toLowerCase(),
+    params: rpcUrl ? { rpcUrl } : {},
   }
-  return network
 }
 
 // ── Price Feeds ────────────────────────────────────────────────────
@@ -92,8 +94,8 @@ export async function getPrice(pair, chain, { rpcUrl } = {}) {
     contract: feedAddress,
     method: FEED_INTERFACE.decimals,
     args: [],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
   const feedDecimals = parseInt(decimalsResult, 10)
 
   // Read latest round data
@@ -101,8 +103,8 @@ export async function getPrice(pair, chain, { rpcUrl } = {}) {
     contract: feedAddress,
     method: FEED_INTERFACE.latestRoundData,
     args: [],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   // roundData is typically returned as a tuple:
   // [roundId, answer, startedAt, updatedAt, answeredInRound]
@@ -135,14 +137,14 @@ export async function getFeedInfo(pair, chain) {
       contract: feedAddress,
       method: FEED_INTERFACE.description,
       args: [],
-      ...net.bridgeParams,
-    }),
+      ...net.params,
+    }, net.network),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.decimals,
       args: [],
-      ...net.bridgeParams,
-    }),
+      ...net.params,
+    }, net.network),
   ])
 
   return {
@@ -198,20 +200,20 @@ export async function getReserves(feed, chain) {
       contract: feedAddress,
       method: FEED_INTERFACE.decimals,
       args: [],
-      ...net.bridgeParams,
-    }),
+      ...net.params,
+    }, net.network),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.latestRoundData,
       args: [],
-      ...net.bridgeParams,
-    }),
+      ...net.params,
+    }, net.network),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.description,
       args: [],
-      ...net.bridgeParams,
-    }),
+      ...net.params,
+    }, net.network),
   ])
 
   const feedDecimals = parseInt(decimalsResult, 10)
@@ -331,8 +333,8 @@ export async function vrfCreateSubscription(chain) {
     contract: coordinator,
     method: VRF_INTERFACE.createSubscription,
     args: [],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   return { subscriptionId: String(subId), coordinator, chain }
 }
@@ -351,8 +353,8 @@ export async function vrfGetSubscription(subscriptionId, chain) {
     contract: coordinator,
     method: VRF_INTERFACE.getSubscription,
     args: [subscriptionId],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   // Normalize the return value
   const balance = Array.isArray(sub) ? sub[0] : sub?.balance
@@ -388,8 +390,8 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain) {
     contract: coordinator,
     method: VRF_INTERFACE.addConsumer,
     args: [subscriptionId, consumer],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   return { subscriptionId, consumer, coordinator, chain }
 }
@@ -419,8 +421,8 @@ export async function vrfRequest(
       numWords,
       '0x', // extraArgs (empty = pay in LINK)
     ],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   return {
     requestId: String(requestId),
@@ -449,8 +451,8 @@ export async function functionsGetSubscription(subscriptionId, chain) {
     method:
       'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
     args: [subscriptionId],
-    ...net.bridgeParams,
-  })
+    ...net.params,
+  }, net.network)
 
   const balance = Array.isArray(sub) ? sub[0] : sub?.balance
   const owner = Array.isArray(sub) ? sub[1] : sub?.owner
