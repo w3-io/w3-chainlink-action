@@ -1,0 +1,57 @@
+name: Chainlink Full Read Test
+on:
+  workflow_dispatch: {}
+
+jobs:
+  reads:
+    runs-on: ubuntu-latest
+    steps:
+      # ── Price Feeds ──────────────────────────────────────────
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: eth-price
+        with:
+          command: get-price
+          pair: ETH/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: btc-price
+        with:
+          command: get-price
+          pair: BTC/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: feed-info
+        with:
+          command: get-feed-info
+          pair: ETH/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: feeds-list
+        with:
+          command: list-feeds
+          chain: sepolia
+
+      # ── CCIP ─────────────────────────────────────────────────
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: ccip-fee
+        with:
+          command: ccip-estimate-fee
+          source-chain: sepolia
+          destination-chain: fuji
+          receiver: "0x5bC6a8220Fd1645970B467092896B5f98bc339dC"
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      # ── Summary ──────────────────────────────────────────────
+      - run: |
+          echo "=== Results ==="
+          echo "ETH/USD: ${{ steps.eth-price.outputs.result }}"
+          echo "BTC/USD: ${{ steps.btc-price.outputs.result }}"
+          echo "Feed info: ${{ steps.feed-info.outputs.result }}"
+          echo "Feeds list: ${{ steps.feeds-list.outputs.result }}"
+          echo "CCIP fee: ${{ steps.ccip-fee.outputs.result }}"

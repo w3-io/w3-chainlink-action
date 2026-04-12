@@ -1,0 +1,21 @@
+name: Chainlink Func Create v1
+on:
+  workflow_dispatch: {}
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: func-create
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: functions-create-subscription
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - run: |
+          echo "Result: ${{ steps.func-create.outputs.result }}"

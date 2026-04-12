@@ -1,0 +1,55 @@
+name: Chainlink VRF Full v1
+on:
+  workflow_dispatch: {}
+
+jobs:
+  vrf:
+    runs-on: ubuntu-latest
+    steps:
+      # Fund the subscription we created earlier with 0.01 ETH
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: vrf-fund
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: vrf-fund-subscription
+          subscription-id: '66004841450484626242556180184864101659150760494059007276137868572443120347363'
+          amount: '10000000000000000'
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      # Request random words from the funded subscription
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: vrf-request
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: vrf-request
+          subscription-id: '66004841450484626242556180184864101659150760494059007276137868572443120347363'
+          chain: sepolia
+          num-words: '1'
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      # Create a Functions subscription
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: func-create
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: functions-create-subscription
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - run: |
+          echo "=== VRF Fund ==="
+          echo "${{ steps.vrf-fund.outputs.result }}"
+          echo "=== VRF Request ==="
+          echo "${{ steps.vrf-request.outputs.result }}"
+          echo "=== Functions Create ==="
+          echo "${{ steps.func-create.outputs.result }}"

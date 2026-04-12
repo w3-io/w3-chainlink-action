@@ -1,15 +1,16 @@
 {
-  "name": "w3-yourpartner-action",
+  "name": "w3-chainlink-action",
   "version": "0.1.0",
   "private": true,
-  "description": "TODO: Your action description",
+  "description": "Chainlink on-chain primitives for W3 workflows — price feeds, CCIP cross-chain transfers, VRF randomness, Functions off-chain compute, proof of reserve, and data streams.",
   "type": "module",
   "scripts": {
     "build": "ncc build src/index.js -o dist",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint src/",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/feeds.test.js test/por.test.js test/ccip.test.js test/vrf.test.js",
+    "test:live": "CHAINLINK_LIVE_TEST=1 node --test test/live.test.js",
     "all": "npm run format && npm run lint && npm run test && npm run build"
   },
   "dependencies": {

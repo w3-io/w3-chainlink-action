@@ -27545,7 +27545,7 @@ function setOutputs(outputs) {
 /**
  * Structured error with code, message, and optional details.
  */
-class W3ActionError extends Error {
+class error_W3ActionError extends Error {
     code;
     statusCode;
     details;
@@ -27564,7 +27564,7 @@ class W3ActionError extends Error {
  *   main().catch(handleError);
  */
 function handleError(error) {
-    if (error instanceof W3ActionError) {
+    if (error instanceof error_W3ActionError) {
         lib_core.setOutput("error-code", error.code);
         if (error.statusCode)
             lib_core.setOutput("status-code", error.statusCode);
@@ -27705,10 +27705,10 @@ async function bridgeRequest(path, body) {
                     if (!res.statusCode || res.statusCode >= 400) {
                         try {
                             const err = JSON.parse(data);
-                            reject(new W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
+                            reject(new error_W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
                         }
                         catch {
-                            reject(new W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
+                            reject(new error_W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
                         }
                         return;
                     }
@@ -27720,7 +27720,7 @@ async function bridgeRequest(path, body) {
                     }
                 });
             });
-            req.on("error", (err) => reject(new W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
+            req.on("error", (err) => reject(new error_W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
             if (payload)
                 req.write(payload);
             req.end();
@@ -27743,7 +27743,7 @@ async function bridgeRequest(path, body) {
         catch {
             // not JSON
         }
-        throw new W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
+        throw new error_W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
     }
     try {
         return JSON.parse(text);
@@ -27994,145 +27994,1400 @@ function createMockCore() {
 
 
 
-;// CONCATENATED MODULE: ./src/client.js
+;// CONCATENATED MODULE: ./src/registry.js
 /**
- * TODO: Rename this file to match your partner (e.g. cube3.js, stripe.js).
+ * Chainlink contract address registry.
  *
- * This is your API client — the core logic of the action. It should:
+ * Maps (pair, chain) to feed contract addresses and provides the ABI
+ * function signatures needed to interact with each product.
  *
- *   1. Be independent of @actions/core (no imports from it here).
- *   2. Use `request` from @w3-io/action-core for HTTP — handles
- *      timeout, retry on 429/5xx, and structured errors.
- *   3. Throw your partner-specific error class (extends W3ActionError)
- *      on failures with machine-readable codes.
- *   4. Return clean, well-structured objects.
+ * Sources:
+ *   - Price Feeds: https://docs.chain.link/data-feeds/price-feeds/addresses
+ *   - CCIP: https://docs.chain.link/ccip/supported-networks
+ *   - VRF: https://docs.chain.link/vrf/v2-5/supported-networks
+ *   - Functions: https://docs.chain.link/chainlink-functions/supported-networks
  *
- * Pattern:
- *   - Constructor takes config (apiKey, baseUrl)
- *   - One public method per command
- *   - Private helpers for formatting, parsing
+ * This file is the source of truth for all contract addresses the action
+ * uses. Keep it up to date when Chainlink deploys new feeds or upgrades
+ * contracts. The `list-feeds` and `list-chains` commands surface this
+ * data directly to workflow authors.
+ */
+
+// ── AggregatorV3Interface ──────────────────────────────────────────
+
+// Signatures stripped of `external view` modifiers — alloy's parser
+// expects just `function name(params) returns (types)`.
+const FEED_INTERFACE = {
+  latestRoundData:
+    'function latestRoundData() returns (uint80, int256, uint256, uint256, uint80)',
+  decimals: 'function decimals() returns (uint8)',
+  description: 'function description() returns (string)',
+  getRoundData:
+    'function getRoundData(uint80) returns (uint80, int256, uint256, uint256, uint80)',
+}
+
+// ── Network configuration ──────────────────────────────────────────
+
+/**
+ * Network mapping: common name → bridge params.
+ *
+ * The bridge's `chain` operation needs to know which network to target.
+ * The exact param shape depends on the bridge's chain provider
+ * implementation. For most EVM chains, passing the network name or
+ * chain ID is sufficient.
+ */
+const NETWORKS = {
+  // Mainnets
+  ethereum: { bridgeParams: {}, chainName: 'ethereum', chainId: 1 },
+  base: { bridgeParams: { network: 'base' }, chainName: 'base', chainId: 8453 },
+  arbitrum: { bridgeParams: { network: 'arbitrum' }, chainName: 'arbitrum', chainId: 42161 },
+  optimism: { bridgeParams: { network: 'optimism' }, chainName: 'optimism', chainId: 10 },
+  polygon: { bridgeParams: { network: 'polygon' }, chainName: 'polygon', chainId: 137 },
+  avalanche: { bridgeParams: { network: 'avalanche' }, chainName: 'avalanche', chainId: 43114 },
+
+  // Testnets — the bridge network name must match the protocol's
+  // KNOWN_CHAINS keys (e.g. "ethereum-sepolia", not just "sepolia").
+  // The user-facing name stays short; the mapping happens here.
+  sepolia: {
+    bridgeParams: { network: 'ethereum-sepolia' },
+    chainName: 'sepolia',
+    chainId: 11155111,
+  },
+  'base-sepolia': {
+    bridgeParams: { network: 'base-sepolia' },
+    chainName: 'base-sepolia',
+    chainId: 84532,
+  },
+  'arbitrum-sepolia': {
+    bridgeParams: { network: 'arbitrum-sepolia' },
+    chainName: 'arbitrum-sepolia',
+    chainId: 421614,
+  },
+  fuji: {
+    bridgeParams: { network: 'avalanche-fuji' },
+    chainName: 'fuji',
+    chainId: 43113,
+  },
+  amoy: {
+    bridgeParams: { network: 'polygon-amoy' },
+    chainName: 'amoy',
+    chainId: 80002,
+  },
+}
+
+// ── Price Feed addresses ───────────────────────────────────────────
+
+/**
+ * Feed registry: chain → { pair → address }
+ *
+ * Pairs are stored uppercase with no spaces: "ETH/USD", "BTC/USD".
+ * Addresses are checksummed.
+ *
+ * This is a curated subset of the most commonly used feeds. Workflow
+ * authors who need a feed not listed here can pass the contract address
+ * directly via the `feed-address` input (bypass the registry).
+ */
+const FEEDS = {
+  ethereum: {
+    'ETH/USD': '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
+    'BTC/USD': '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c',
+    'LINK/USD': '0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c',
+    'USDC/USD': '0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6',
+    'DAI/USD': '0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9',
+    'USDT/USD': '0x3E7d1eAB13ad0104d2750B8863b489D65364e32D',
+    'SOL/USD': '0x4ffC43a60e009B551865A93d232E33Fce9f01507',
+    'AVAX/USD': '0xFF3EEb22B5E3dE6e705b44749C2559d704923FD7',
+    'MATIC/USD': '0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676',
+    'ARB/USD': '0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6',
+    'AAVE/USD': '0x547a514d5e3769680Ce22B2361c10Ea13619e8a9',
+    'UNI/USD': '0x553303d460EE0afB37EdFf9bE42922D8FF63220e',
+    'COMP/USD': '0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5',
+    'MKR/USD': '0xec1D1B3b0443256cc3860e24a46F108e699484Aa',
+    'SNX/USD': '0xDC3EA94CD0AC27d9A86C180091e7f78C683d3699',
+    'SHIB/USD': '0x8dD1CD88F43aF196ae478e91b9F5E4Ac69A97C61',
+    // Removed: OP/USD, CRV/USD, DOGE/USD, LTC/USD, XRP/USD, DOT/USD,
+    // ATOM/USD, FIL/USD — these addresses revert or return empty on
+    // mainnet as of April 2026. The feeds may have been deprecated or
+    // migrated. Re-verify via data.chain.link before re-adding.
+  },
+  sepolia: {
+    'ETH/USD': '0x694AA1769357215DE4FAC081bf1f309aDC325306',
+    'BTC/USD': '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43',
+    'LINK/USD': '0xc59E3633BAAC79493d908e63626716e204A45EdF',
+    'USDC/USD': '0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E',
+    'DAI/USD': '0x14866185B1962B63C3Ea9E03Bc1da838bab34C19',
+  },
+  base: {
+    'ETH/USD': '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
+    'BTC/USD': '0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F',
+    'LINK/USD': '0x17CAb8FE31cA45e1ab3ACC27e678a47D9CDca516',
+    'USDC/USD': '0x7e860098F58bBFC8648a4311b374B1D669a2bc6B',
+    'CBETH/USD': '0xd7818272B9e248357d13057AAb0B417aF31E817d',
+  },
+  arbitrum: {
+    'ETH/USD': '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
+    'BTC/USD': '0x6ce185860a4963106506C203335A2910413708e9',
+    'LINK/USD': '0x86E53CF1B870786351Da77A57575e79CB55812CB',
+    'USDC/USD': '0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3',
+    'ARB/USD': '0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6',
+  },
+  polygon: {
+    'ETH/USD': '0xF9680D99D6C9589e2a93a78A04A279e509205945',
+    'BTC/USD': '0xc907E116054Ad103354f2D350FD2514433D57F6f',
+    'LINK/USD': '0xd9FFdb71EbE7496cC440152d43986Aae0AB76665',
+    'MATIC/USD': '0xAB594600376Ec9fD91F8e8dC60a760E1142F1eE1',
+    'USDC/USD': '0xfE4A8cc5b5B2366C1B58Bea3858e81843583ee2e',
+  },
+  avalanche: {
+    'ETH/USD': '0x976B3D034E162d8bD72D6b9C989d545b839003b0',
+    'BTC/USD': '0x2779D32d5166BAaa2B2b658333bA7e6Ec0C65743',
+    'LINK/USD': '0x49ccd9ca821EfEab2b98c60dC60F518E765EDe9a',
+    'AVAX/USD': '0x0A77230d17318075983913bC2145DB16C7366156',
+    'USDC/USD': '0xF096872672F44d6EBA71458D74fe67F9a77a23B9',
+  },
+}
+
+// ── Proof of Reserve feed addresses ────────────────────────────────
+
+/**
+ * Proof of Reserve feeds. Same AggregatorV3Interface as price feeds.
+ * The `answer` field represents total reserves (not a price). Units
+ * depend on the asset (e.g., satoshis for BTC reserves, base units for
+ * USDC). Always call decimals() to confirm.
+ *
+ * No programmatic on-chain way to distinguish PoR from price feeds —
+ * you must know from the documentation. description() typically
+ * contains "Reserves" or "PoR".
+ */
+const POR_FEEDS = {
+  ethereum: {
+    'WBTC/BTC': '0xa81FE04086865e63E12dD3776978E49DEEa2ea4e',
+  },
+}
+
+// ── CCIP configuration ─────────────────────────────────────────────
+
+/**
+ * CCIP chain selectors and router addresses.
+ * Source: https://docs.chain.link/ccip/supported-networks
+ */
+const CCIP = {
+  routers: {
+    ethereum: '0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D',
+    arbitrum: '0x141fa059441E0ca23ce184B6A78bafD2A517DdE8',
+    optimism: '0x3206695CaE29952f4b0c22a169725a865bc8Ce0f',
+    base: '0x881e3A65B4d4a04dD529061dd0071cf975F58bCD',
+    polygon: '0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe',
+    avalanche: '0xF4c7E640EdA248ef95972845a62bdC74237805dB',
+    // Testnets
+    sepolia: '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59',
+    'base-sepolia': '0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93',
+    'arbitrum-sepolia': '0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165',
+    fuji: '0xF694E193200268f9a4868e4Aa017A0118C9a8177',
+    amoy: '0x9C32fCB86BF0f4a1A8921a9Fe46de3198bb884B2',
+  },
+  chainSelectors: {
+    ethereum: '5009297550715157269',
+    arbitrum: '4949039107694359620',
+    optimism: '3734403246176062136',
+    base: '15971525489660198786',
+    polygon: '4051577828743386545',
+    avalanche: '6433500567565415381',
+    // Testnets
+    sepolia: '16015286601757825753',
+    'base-sepolia': '10344971235874465080',
+    'arbitrum-sepolia': '3478487238524512106',
+    fuji: '14767482510784806043',
+    amoy: '16281711391670634445',
+  },
+}
+
+/**
+ * LINK token addresses per chain (needed for CCIP fee payment).
+ * address(0) means "pay in native" — the router accepts msg.value.
+ */
+const LINK_TOKENS = {
+  ethereum: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+  arbitrum: '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4',
+  base: '0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196',
+  polygon: '0xb0897686c545045aFc77CF20eC7A532E3120E0F1',
+  avalanche: '0x5947BB275c521040051D82396192181b413227A3',
+  optimism: '0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6',
+  // Testnets
+  sepolia: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
+  fuji: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
+}
+
+/**
+ * CCIP interface functions.
+ */
+// Full ABI JSON for CCIP Router — required because the bridge's DynSolType
+// cannot resolve bare 'tuple' types from signature-parsed Function params.
+// The JSON ABI preserves the components array, enabling proper encoding.
+const CCIP_ABI = JSON.stringify([
+  {
+    name: 'getFee',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'destinationChainSelector', type: 'uint64' },
+      {
+        name: 'message',
+        type: 'tuple',
+        components: [
+          { name: 'receiver', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+          {
+            name: 'tokenAmounts',
+            type: 'tuple[]',
+            components: [
+              { name: 'token', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+          },
+          { name: 'feeToken', type: 'address' },
+          { name: 'extraArgs', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'fee', type: 'uint256' }],
+  },
+  {
+    name: 'ccipSend',
+    type: 'function',
+    stateMutability: 'payable',
+    inputs: [
+      { name: 'destinationChainSelector', type: 'uint64' },
+      {
+        name: 'message',
+        type: 'tuple',
+        components: [
+          { name: 'receiver', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+          {
+            name: 'tokenAmounts',
+            type: 'tuple[]',
+            components: [
+              { name: 'token', type: 'address' },
+              { name: 'amount', type: 'uint256' },
+            ],
+          },
+          { name: 'feeToken', type: 'address' },
+          { name: 'extraArgs', type: 'bytes' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'messageId', type: 'bytes32' }],
+  },
+])
+
+const CCIP_INTERFACE = {
+  getFee: 'getFee',
+  ccipSend: 'ccipSend',
+}
+
+// ── VRF v2.5 configuration ─────────────────────────────────────────
+
+const VRF = {
+  coordinators: {
+    ethereum: '0xD7f86b4b8Cae7D942340FF628F82735b7a20893a',
+    arbitrum: '0x3C0Ca683b403E37668AE3DC4FB62F4B29B6f7571',
+    base: '0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634',
+    polygon: '0xec0Ed46f36576541C681b72033893895e0faE0C9',
+    avalanche: '0xE40895D055bccd2053FD1F5744b0ad87781E523B',
+    // Testnets
+    sepolia: '0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B',
+    'base-sepolia': '0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE',
+    fuji: '0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE',
+  },
+  keyHashes: {
+    // Each chain has multiple key hashes for different gas lanes.
+    // Using the "500 gwei" lane as default for mainnet, "100 gwei" for testnets.
+    ethereum: '0x8077df514608a09f83e4e8d300645594e5d7234665448ba83f51a50f842bd3d9',
+    sepolia: '0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae',
+  },
+}
+
+const VRF_INTERFACE = {
+  createSubscription: 'function createSubscription() returns (uint256)',
+  addConsumer: 'function addConsumer(uint256, address)',
+  removeConsumer: 'function removeConsumer(uint256, address)',
+  getSubscription:
+    'function getSubscription(uint256) returns (uint96, uint96, uint64, address, address[])',
+  requestRandomWords:
+    'function requestRandomWords(bytes32, uint256, uint16, uint32, uint32, bytes) returns (uint256)',
+  fundSubscription: 'function fundSubscriptionWithNative(uint256) payable',
+}
+
+// ── Functions configuration ────────────────────────────────────────
+
+const FUNCTIONS = {
+  routers: {
+    ethereum: '0x65Dcc24F8ff9e51F10DCc7Ed1e4e2A61e6E14bd6',
+    arbitrum: '0x97083E831F8F0638855e2A515c90EdCF158DF238',
+    base: '0xf9B8fc078197181C841c296C876945aaa425B278',
+    polygon: '0xdc2AAF042Aeff2E68B3e8E33F19e4B9fA7C73F10',
+    avalanche: '0xA9d587a00A31A52Ed70D6026794a8FC5E2F5E6bf',
+    // Testnets
+    sepolia: '0xb83E47C2bC239B3bf370bc41e1459A34b41238D0',
+    'base-sepolia': '0xf9B8fc078197181C841c296C876945aaa425B278',
+    fuji: '0xA9d587a00A31A52Ed70D6026794a8FC5E2F5E6bf',
+  },
+  donIds: {
+    ethereum: 'fun-ethereum-mainnet-1',
+    sepolia: 'fun-ethereum-sepolia-1',
+    arbitrum: 'fun-arbitrum-mainnet-1',
+    'arbitrum-sepolia': 'fun-arbitrum-sepolia-1',
+    base: 'fun-base-mainnet-1',
+    'base-sepolia': 'fun-base-sepolia-1',
+    polygon: 'fun-polygon-mainnet-1',
+    amoy: 'fun-polygon-amoy-1',
+    avalanche: 'fun-avalanche-mainnet-1',
+    fuji: 'fun-avalanche-fuji-1',
+  },
+}
+
+;// CONCATENATED MODULE: ./src/chainlink.js
+/**
+ * Chainlink on-chain client.
+ *
+ * Unlike REST-based partners (BitGo, Stripe, etc.), Chainlink's products
+ * are mostly smart contracts you read from or call. This client uses the
+ * W3 syscall bridge to make on-chain calls rather than HTTP requests.
+ *
+ * The bridge runs on the host and handles signing via W3_SECRET_*
+ * keys — no private keys in the action container.
+ *
+ * ## Architecture
+ *
+ * Each Chainlink product has its own set of methods organized by prefix:
+ *   - Price Feeds:    getPrice, getFeedInfo, listFeeds
+ *   - Proof of Reserve: getReserves
+ *   - CCIP:           ccipSend, ccipEstimateFee, ccipGetMessage
+ *   - VRF:            vrfRequest, vrfGetSubscription, ...
+ *   - Functions:      functionsRequest, functionsGetSubscription, ...
+ *   - Data Streams:   streamsFetchReport, ... (REST, not bridge)
+ *
+ * All on-chain reads go through `bridge.chain('ethereum', 'read-contract', ...)`
+ * All on-chain writes go through `bridge.chain('ethereum', 'call-contract', ...)`
  */
 
 
 
-// TODO: Replace with your partner's API URL
-const DEFAULT_BASE_URL = 'https://api.yourpartner.com'
 
 /**
- * Partner-specific error class. Extends W3ActionError so action-core's
- * handleError reports the structured code and downstream consumers can
- * pattern-match on err.code.
- *
- * TODO: Rename to match your partner (e.g. Cube3Error, StripeError).
+ * Chainlink-specific error class.
  */
-class ClientError extends W3ActionError {
-  constructor(code, message, { statusCode, details } = {}) {
-    super(code, message, { statusCode, details })
-    this.name = 'ClientError'
+class ChainlinkError extends error_W3ActionError {
+  constructor(code, message, { details } = {}) {
+    super(code, message, { details })
+    this.name = 'ChainlinkError'
   }
 }
 
-// TODO: Rename this class (e.g. Cube3Client, StripeClient)
-class Client {
-  constructor({ apiKey, baseUrl = DEFAULT_BASE_URL } = {}) {
-    // TODO: Remove this check if your API doesn't need auth
-    if (!apiKey) {
-      throw new ClientError('MISSING_API_KEY', 'API key is required')
+/**
+ * Resolve a chain name to its bridge network name and optional params.
+ *
+ * bridge.chain() takes 4 args: (chainFamily, action, params, network).
+ * The network (4th arg) is what the bridge uses for RPC resolution.
+ * The params (3rd arg) contain contract, method, args, and optionally rpcUrl.
+ *
+ * Returns { network, params } where:
+ *   - network: the bridge network name (e.g. "ethereum-sepolia")
+ *   - params: extra params to merge into each bridge call (e.g. { rpcUrl })
+ */
+function resolveNetwork(chain, rpcUrl) {
+  if (!chain) {
+    throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
+  }
+  const config = NETWORKS[chain.toLowerCase()]
+  if (!config) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `Chain "${chain}" is not supported. Available: ${Object.keys(NETWORKS).join(', ')}`,
+    )
+  }
+  return {
+    network: config.bridgeParams?.network || chain.toLowerCase(),
+    params: rpcUrl ? { rpcUrl } : {},
+  }
+}
+
+/**
+ * Extract a value from a bridge response. The bridge may return:
+ *   - A decoded value directly (string, number, array)
+ *   - An object { ok: true, raw: "0x...", result: [...] }
+ *   - An object { ok: false, error: "..." }
+ */
+function unwrapBridgeResult(result) {
+  if (result && typeof result === 'object' && 'ok' in result) {
+    if (!result.ok) {
+      throw new ChainlinkError(
+        result.code || 'BRIDGE_ERROR',
+        result.error || 'Bridge call failed',
+      )
     }
-    this.apiKey = apiKey
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
+    // If the bridge decoded the result, use it
+    if (result.result !== undefined) return result.result
+    // Otherwise decode the raw ABI hex ourselves
+    if (result.raw) return decodeAbiHex(result.raw)
+    return result
+  }
+  return result
+}
+
+/**
+ * Decode ABI-encoded hex into an array of uint256 words.
+ * Each word is 32 bytes (64 hex chars). Values are returned as strings
+ * to avoid JavaScript number precision loss on uint256.
+ */
+function decodeAbiHex(hex) {
+  const data = hex.startsWith('0x') ? hex.slice(2) : hex
+  const words = []
+  for (let i = 0; i < data.length; i += 64) {
+    const word = data.slice(i, i + 64)
+    if (word.length === 64) {
+      words.push(BigInt('0x' + word).toString())
+    }
+  }
+  return words.length === 1 ? words[0] : words
+}
+
+// ── Price Feeds ────────────────────────────────────────────────────
+
+/**
+ * Get the latest price from a Chainlink Data Feed.
+ *
+ * @param {string} pair - e.g. "ETH/USD"
+ * @param {string} chain - e.g. "ethereum", "sepolia", "base"
+ * @returns {{ pair, chain, price, decimals, roundId, updatedAt, raw }}
+ */
+async function getPrice(pair, chain, { rpcUrl } = {}) {
+  if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required (e.g. "ETH/USD")')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const feedAddress = lookupFeed(pair, chain)
+
+  // Read decimals first so we can format the answer
+  const decimalsResult = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+    contract: feedAddress,
+    method: FEED_INTERFACE.decimals,
+    args: [],
+    ...net.params,
+  }, net.network))
+  const feedDecimals = parseInt(decimalsResult, 10)
+
+  // Read latest round data
+  const roundData = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+    contract: feedAddress,
+    method: FEED_INTERFACE.latestRoundData,
+    args: [],
+    ...net.params,
+  }, net.network))
+
+  // roundData is typically returned as a tuple:
+  // [roundId, answer, startedAt, updatedAt, answeredInRound]
+  const parsed = parseRoundData(roundData, feedDecimals)
+
+  return {
+    pair,
+    chain,
+    price: parsed.price,
+    priceRaw: parsed.answerRaw,
+    decimals: feedDecimals,
+    roundId: parsed.roundId,
+    updatedAt: parsed.updatedAt,
+    feedAddress,
+    raw: roundData,
+  }
+}
+
+/**
+ * Get metadata about a specific feed.
+ */
+async function getFeedInfo(pair, chain, { rpcUrl } = {}) {
+  if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const feedAddress = lookupFeed(pair, chain)
+
+  const [description, decimalsResult] = await Promise.all([
+    bridge.chain('ethereum', 'read-contract', {
+      contract: feedAddress,
+      method: FEED_INTERFACE.description,
+      args: [],
+      ...net.params,
+    }, net.network).then(unwrapBridgeResult),
+    bridge.chain('ethereum', 'read-contract', {
+      contract: feedAddress,
+      method: FEED_INTERFACE.decimals,
+      args: [],
+      ...net.params,
+    }, net.network).then(unwrapBridgeResult),
+  ])
+
+  return {
+    pair,
+    chain,
+    feedAddress,
+    description: String(description),
+    decimals: parseInt(decimalsResult, 10),
+  }
+}
+
+/**
+ * List available price feeds for a chain.
+ */
+function listFeeds(chain) {
+  if (!chain) throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
+
+  const chainKey = chain.toLowerCase()
+  const feeds = FEEDS[chainKey]
+  if (!feeds) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No feeds registered for chain "${chain}". Available chains: ${Object.keys(FEEDS).join(', ')}`,
+    )
   }
 
-  /**
-   * TODO: Replace with your first command.
-   *
-   * Example:
-   *   async inspect(address) { ... }
-   *   async getLatestPrices(ids) { ... }
-   */
-  async exampleCommand(input) {
-    if (!input) {
-      throw new ClientError('MISSING_INPUT', 'Input is required')
-    }
+  return {
+    chain,
+    feeds: Object.entries(feeds).map(([pair, address]) => ({ pair, address })),
+    count: Object.keys(feeds).length,
+  }
+}
 
-    try {
-      return await request(`${this.baseUrl}/v1/example/${encodeURIComponent(input)}`, {
-        headers: {
-          // TODO: Adjust auth header to match your partner's API.
-          // Common patterns:
-          //   'X-Api-Key': this.apiKey
-          //   'Authorization': `Bearer ${this.apiKey}`
-          'X-Api-Key': this.apiKey,
-        },
-      })
-    } catch (err) {
-      // action-core throws W3ActionError on non-2xx with the response body
-      // jammed into the message. Translate into a typed ClientError so
-      // downstream consumers can pattern-match on err.code.
-      if (err && typeof err === 'object' && 'statusCode' in err) {
-        throw new ClientError('API_ERROR', err.message || `HTTP ${err.statusCode}`, {
-          statusCode: err.statusCode,
-        })
+// ── Proof of Reserve ───────────────────────────────────────────────
+
+/**
+ * Get the latest reserve data from a Chainlink Proof of Reserve feed.
+ *
+ * Same AggregatorV3Interface as price feeds — the `answer` field
+ * represents total reserves in base units (e.g., satoshis for BTC).
+ *
+ * @param {string} feed - e.g. "WBTC/BTC"
+ * @param {string} chain - e.g. "ethereum"
+ */
+async function getReserves(feed, chain, { rpcUrl } = {}) {
+  if (!feed) throw new ChainlinkError('MISSING_FEED', 'feed is required (e.g. "WBTC/BTC")')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const feedAddress = lookupPorFeed(feed, chain)
+
+  const [decimalsResult, roundData, description] = await Promise.all([
+    bridge.chain('ethereum', 'read-contract', {
+      contract: feedAddress,
+      method: FEED_INTERFACE.decimals,
+      args: [],
+      ...net.params,
+    }, net.network).then(unwrapBridgeResult),
+    bridge.chain('ethereum', 'read-contract', {
+      contract: feedAddress,
+      method: FEED_INTERFACE.latestRoundData,
+      args: [],
+      ...net.params,
+    }, net.network).then(unwrapBridgeResult),
+    bridge.chain('ethereum', 'read-contract', {
+      contract: feedAddress,
+      method: FEED_INTERFACE.description,
+      args: [],
+      ...net.params,
+    }, net.network).then(unwrapBridgeResult),
+  ])
+
+  const feedDecimals = parseInt(decimalsResult, 10)
+  const parsed = parseRoundData(roundData, feedDecimals)
+
+  return {
+    feed,
+    chain,
+    reserves: parsed.price,
+    reservesRaw: parsed.answerRaw,
+    decimals: feedDecimals,
+    description: String(description),
+    roundId: parsed.roundId,
+    updatedAt: parsed.updatedAt,
+    feedAddress,
+    raw: roundData,
+  }
+}
+
+// ── CCIP (Cross-Chain Interoperability Protocol) ───────────────────
+
+/**
+ * Estimate the fee for a CCIP cross-chain transfer.
+ *
+ * @param {string} sourceChain - e.g. "ethereum"
+ * @param {string} destinationChain - e.g. "arbitrum"
+ * @param {string} receiver - destination address
+ * @param {Array} tokenAmounts - [{token, amount}] or empty for message-only
+ * @param {string} data - arbitrary bytes payload (default "0x")
+ * @param {string} feeToken - LINK address, or "native" for native gas, or "link" for LINK
+ */
+async function ccipEstimateFee(
+  sourceChain,
+  destinationChain,
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', rpcUrl } = {},
+) {
+  if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
+  if (!destinationChain)
+    throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
+  if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
+
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
+  const router = lookupCcipRouter(sourceChain)
+  const destSelector = lookupCcipSelector(destinationChain)
+  const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
+
+  // Build the EVM2AnyMessage struct
+  const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken)
+
+  const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+    contract: router,
+    method: CCIP_INTERFACE.getFee,
+    abi: CCIP_ABI,
+    args: [destSelector, message],
+    ...srcNet.params,
+  }, srcNet.network))
+
+  return {
+    sourceChain,
+    destinationChain,
+    fee: String(fee),
+    feeToken: resolvedFeeToken,
+    router,
+    destinationSelector: destSelector,
+  }
+}
+
+/**
+ * Send a CCIP cross-chain message (optionally with tokens).
+ *
+ * This is a write operation — the bridge needs a signer key
+ * configured via W3_SECRET_* environment variables.
+ */
+async function ccipSend(
+  sourceChain,
+  destinationChain,
+  { receiver, tokenAmounts = [], data = '0x', feeToken = 'native', gasLimit = '200000', rpcUrl } = {},
+) {
+  if (!sourceChain) throw new ChainlinkError('MISSING_SOURCE_CHAIN', 'source-chain is required')
+  if (!destinationChain)
+    throw new ChainlinkError('MISSING_DESTINATION_CHAIN', 'destination-chain is required')
+  if (!receiver) throw new ChainlinkError('MISSING_RECEIVER', 'receiver is required')
+
+  const srcNet = resolveNetwork(sourceChain, rpcUrl)
+  const router = lookupCcipRouter(sourceChain)
+  const destSelector = lookupCcipSelector(destinationChain)
+  const resolvedFeeToken = resolveFeeToken(feeToken, sourceChain)
+
+  const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken, gasLimit)
+
+  // For native fee payment, estimate the fee first and send as msg.value
+  let value
+  if (resolvedFeeToken === '0x0000000000000000000000000000000000000000') {
+    const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+      contract: router,
+      method: CCIP_INTERFACE.getFee,
+      abi: CCIP_ABI,
+      args: [destSelector, message],
+      ...srcNet.params,
+    }, srcNet.network))
+    // Add 10% buffer for fee fluctuation
+    value = String(BigInt(fee) + BigInt(fee) / 10n)
+  }
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: router,
+    method: CCIP_INTERFACE.ccipSend,
+    abi: CCIP_ABI,
+    args: [destSelector, message],
+    ...(value ? { value } : {}),
+    ...srcNet.params,
+  }, srcNet.network)
+
+  return {
+    status: 'sent',
+    txHash: extractTxHash(receipt),
+    fee: value || '0',
+    sourceChain,
+    destinationChain,
+    router,
+    destinationSelector: destSelector,
+  }
+}
+
+// ── VRF (Verifiable Random Function) ───────────────────────────────
+
+/**
+ * Create a new VRF subscription.
+ */
+async function vrfCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.createSubscription,
+    args: [],
+    ...net.params,
+  }, net.network)
+
+  // call-contract returns a tx receipt. Parse the subscription ID from
+  // the SubscriptionCreated event log or fall back to the tx hash.
+  const subId = parseSubscriptionIdFromReceipt(receipt)
+
+  return {
+    subscriptionId: subId,
+    txHash: extractTxHash(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
+ * Get VRF subscription details.
+ */
+async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.getSubscription,
+    args: [subscriptionId],
+    ...net.params,
+  }, net.network))
+
+  // Normalize the return value
+  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
+  const nativeBalance = Array.isArray(sub) ? sub[1] : sub?.nativeBalance
+  const reqCount = Array.isArray(sub) ? sub[2] : sub?.reqCount
+  const owner = Array.isArray(sub) ? sub[3] : sub?.subOwner
+  const consumers = Array.isArray(sub) ? sub[4] : sub?.consumers
+
+  return {
+    subscriptionId,
+    chain,
+    coordinator,
+    balance: String(balance ?? '0'),
+    nativeBalance: String(nativeBalance ?? '0'),
+    requestCount: String(reqCount ?? '0'),
+    owner: String(owner ?? ''),
+    consumers: Array.isArray(consumers) ? consumers.map(String) : [],
+  }
+}
+
+/**
+ * Add a consumer contract to a VRF subscription.
+ */
+async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.addConsumer,
+    args: [subscriptionId, consumer],
+    ...net.params,
+  }, net.network)
+
+  return {
+    subscriptionId,
+    consumer,
+    txHash: extractTxHash(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
+ * Fund a VRF subscription with native ETH.
+ *
+ * Uses fundSubscriptionWithNative — avoids the ERC20 approve dance.
+ * The value (in wei) is sent as msg.value.
+ */
+async function vrfFundSubscription(subscriptionId, chain, { amount, rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!amount)
+    throw new ChainlinkError('MISSING_AMOUNT', 'amount is required (in wei)')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.fundSubscription,
+    args: [subscriptionId],
+    value: amount,
+    ...net.params,
+  }, net.network)
+
+  return {
+    subscriptionId,
+    amount,
+    txHash: extractTxHash(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
+ * Request random words from VRF v2.5.
+ */
+async function vrfRequest(
+  chain,
+  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3, rpcUrl } = {},
+) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+  const keyHash = lookupVrfKeyHash(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: coordinator,
+    method: VRF_INTERFACE.requestRandomWords,
+    args: [
+      keyHash,
+      subscriptionId,
+      requestConfirmations,
+      callbackGasLimit,
+      numWords,
+      '0x', // extraArgs (empty = pay in LINK)
+    ],
+    ...net.params,
+  }, net.network)
+
+  return {
+    txHash: extractTxHash(receipt),
+    subscriptionId,
+    numWords,
+    coordinator,
+    chain,
+  }
+}
+
+// ── Functions (Chainlink Functions) ────────────────────────────────
+
+/**
+ * Create a Chainlink Functions subscription.
+ */
+async function functionsCreateSubscription(chain, { rpcUrl } = {}) {
+  const net = resolveNetwork(chain, rpcUrl)
+  const router = lookupFunctionsRouter(chain)
+
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
+    contract: router,
+    method: 'function createSubscription() returns (uint64)',
+    args: [],
+    ...net.params,
+  }, net.network)
+
+  // Parse subscription ID from SubscriptionCreated event
+  const subId = parseSubscriptionIdFromReceipt(receipt)
+
+  return {
+    subscriptionId: subId,
+    txHash: extractTxHash(receipt),
+    router,
+    chain,
+  }
+}
+
+/**
+ * Get a Chainlink Functions subscription.
+ */
+async function functionsGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const router = lookupFunctionsRouter(chain)
+
+  // Functions Router v1.2 returns a Subscription struct.
+  // Use the full ABI to handle tuple return type properly.
+  const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+    contract: router,
+    method: 'getSubscription',
+    abi: JSON.stringify([{
+      name: 'getSubscription',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [{ name: 'subscriptionId', type: 'uint64' }],
+      outputs: [{
+        name: 'subscription',
+        type: 'tuple',
+        components: [
+          { name: 'balance', type: 'uint96' },
+          { name: 'owner', type: 'address' },
+          { name: 'blockedBalance', type: 'uint96' },
+          { name: 'proposedOwner', type: 'address' },
+          { name: 'consumers', type: 'address[]' },
+          { name: 'flags', type: 'bytes32' },
+        ],
+      }],
+    }]),
+    args: [subscriptionId],
+    ...net.params,
+  }, net.network))
+
+  // Bridge returns the tuple as a JSON array
+  let data = sub
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data) } catch { /* use as-is */ }
+  }
+  const balance = Array.isArray(data) ? data[0] : data?.balance
+  const owner = Array.isArray(data) ? data[1] : data?.owner
+  const consumers = Array.isArray(data) ? data[4] : data?.consumers
+
+  return {
+    subscriptionId,
+    chain,
+    router,
+    balance: String(balance ?? '0'),
+    owner: String(owner ?? ''),
+    consumers: Array.isArray(consumers) ? consumers.map(String) : [],
+  }
+}
+
+// ── Internal helpers ───────────────────────────────────────────────
+
+/**
+ * Parse the subscription ID from a VRF createSubscription receipt.
+ *
+ * The coordinator emits SubscriptionCreated(uint256 subId, address owner).
+ * Topic[0] = keccak256("SubscriptionCreated(uint256,address)")
+ * Topic[1] = subId (indexed)
+ */
+function parseSubscriptionIdFromReceipt(receipt) {
+  // The bridge may return a nested JSON string or a plain object.
+  let rx = receipt
+  if (typeof rx === 'string') {
+    try { rx = JSON.parse(rx) } catch { return rx }
+  }
+  // Unwrap bridge envelope
+  if (rx?.ok && rx?.logs) rx = { ...rx, logs_json: rx.logs }
+
+  const logs = rx?.logs_json || rx?.logs || rx?.logsJson
+  if (logs) {
+    const logArr = typeof logs === 'string' ? JSON.parse(logs) : logs
+    // VRF v2.5 SubscriptionCreated event — topic[1] is the subId
+    // Accept any event with 2 topics from the coordinator address
+    for (const log of logArr) {
+      const topics = log.topics || []
+      if (topics.length >= 2 && topics[1]) {
+        return BigInt(topics[1]).toString()
       }
-      throw err
     }
+  }
+  // Fallback: return the tx hash or stringified receipt
+  return rx?.txHash || rx?.tx_hash || JSON.stringify(receipt)
+}
+
+/**
+ * Extract tx hash from a bridge call-contract receipt.
+ *
+ * The bridge may return:
+ *   - A plain string (tx hash)
+ *   - An object { ok, txHash, blockNumber, gasUsed, status, logs }
+ *   - A nested JSON string of the above
+ */
+function extractTxHash(receipt) {
+  let rx = receipt
+  if (typeof rx === 'string') {
+    try { rx = JSON.parse(rx) } catch { return rx }
+  }
+  return rx?.txHash || rx?.tx_hash || rx?.transactionId || String(receipt)
+}
+
+/**
+ * Look up the VRF coordinator address for a chain.
+ */
+function lookupVrfCoordinator(chain) {
+  const addr = VRF.coordinators[chain.toLowerCase()]
+  if (!addr) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No VRF coordinator for chain "${chain}". Available: ${Object.keys(VRF.coordinators).join(', ')}`,
+    )
+  }
+  return addr
+}
+
+/**
+ * Look up the VRF key hash for a chain.
+ */
+function lookupVrfKeyHash(chain) {
+  const hash = VRF.keyHashes[chain.toLowerCase()]
+  if (!hash) {
+    throw new ChainlinkError(
+      'MISSING_KEY_HASH',
+      `No VRF key hash registered for chain "${chain}". Available: ${Object.keys(VRF.keyHashes).join(', ')}`,
+    )
+  }
+  return hash
+}
+
+/**
+ * Look up the Functions router address for a chain.
+ */
+function lookupFunctionsRouter(chain) {
+  const addr = FUNCTIONS.routers[chain.toLowerCase()]
+  if (!addr) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No Functions router for chain "${chain}". Available: ${Object.keys(FUNCTIONS.routers).join(', ')}`,
+    )
+  }
+  return addr
+}
+
+/**
+ * Look up a PoR feed address from the registry.
+ */
+function lookupPorFeed(feed, chain) {
+  const chainKey = chain.toLowerCase()
+  const feedKey = feed.toUpperCase().replace(/\s/g, '')
+
+  const chainFeeds = POR_FEEDS[chainKey]
+  if (!chainFeeds) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No PoR feeds registered for chain "${chain}". Available chains: ${Object.keys(POR_FEEDS).join(', ')}`,
+    )
+  }
+
+  const address = chainFeeds[feedKey]
+  if (!address) {
+    throw new ChainlinkError(
+      'UNKNOWN_FEED',
+      `No PoR feed found for "${feed}" on ${chain}. Available: ${Object.keys(chainFeeds).join(', ')}`,
+    )
+  }
+
+  return address
+}
+
+/**
+ * Look up the CCIP router address for a chain.
+ */
+function lookupCcipRouter(chain) {
+  const router = CCIP.routers[chain.toLowerCase()]
+  if (!router) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No CCIP router for chain "${chain}". Available: ${Object.keys(CCIP.routers).join(', ')}`,
+    )
+  }
+  return router
+}
+
+/**
+ * Look up the CCIP chain selector for a destination chain.
+ */
+function lookupCcipSelector(chain) {
+  const selector = CCIP.chainSelectors[chain.toLowerCase()]
+  if (!selector) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No CCIP selector for chain "${chain}". Available: ${Object.keys(CCIP.chainSelectors).join(', ')}`,
+    )
+  }
+  return selector
+}
+
+/**
+ * Resolve a fee token specifier to an address.
+ * "native" or "" → address(0) — pay in native gas
+ * "link" → the LINK token address for the source chain
+ * Otherwise → treat as a raw address
+ */
+function resolveFeeToken(feeToken, sourceChain) {
+  if (!feeToken || feeToken === 'native') return '0x0000000000000000000000000000000000000000'
+  if (feeToken.toLowerCase() === 'link') {
+    const addr = LINK_TOKENS[sourceChain.toLowerCase()]
+    if (!addr) {
+      throw new ChainlinkError(
+        'UNKNOWN_LINK_TOKEN',
+        `No LINK token address registered for ${sourceChain}`,
+      )
+    }
+    return addr
+  }
+  return feeToken
+}
+
+/**
+ * Build the CCIP EVM2AnyMessage struct for bridge calls.
+ */
+function buildCcipMessage(receiver, data, tokenAmounts, feeToken, _gasLimit) {
+  // CCIP receiver is bytes — for EVM destinations, ABI-encode the address to 32 bytes
+  const encodedReceiver = '0x' + receiver.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+  // Format as parenthesized tuple string for DynSolType::coerce_str.
+  // The bridge converts non-string args via JSON.stringify, but coerce_str
+  // expects tuple syntax: (val1, val2, ...) not [val1, val2, ...]
+  const amounts = tokenAmounts.map((ta) => `(${ta.token}, ${ta.amount})`).join(', ')
+  return `(${encodedReceiver}, ${data || '0x'}, [${amounts}], ${feeToken}, 0x)`
+}
+
+/**
+ * Look up a feed address from the registry.
+ */
+function lookupFeed(pair, chain) {
+  const chainKey = chain.toLowerCase()
+  const pairKey = pair.toUpperCase().replace(/\s/g, '')
+
+  const chainFeeds = FEEDS[chainKey]
+  if (!chainFeeds) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No feeds registered for chain "${chain}". Available chains: ${Object.keys(FEEDS).join(', ')}`,
+    )
+  }
+
+  const address = chainFeeds[pairKey]
+  if (!address) {
+    throw new ChainlinkError(
+      'UNKNOWN_FEED',
+      `No feed found for "${pair}" on ${chain}. Available feeds: ${Object.keys(chainFeeds).join(', ')}`,
+    )
+  }
+
+  return address
+}
+
+/**
+ * Parse the return value of latestRoundData().
+ *
+ * The bridge returns contract read results in different shapes depending
+ * on the chain provider. This function normalizes the common cases:
+ *   - Array/tuple: [roundId, answer, startedAt, updatedAt, answeredInRound]
+ *   - Object with named fields
+ *   - Raw hex that needs decoding
+ */
+function parseRoundData(raw, decimals) {
+  let roundId, answer, updatedAt
+
+  // The bridge may return:
+  //   - A real JS array [roundId, answer, startedAt, updatedAt, answeredInRound]
+  //   - A JSON-encoded string: '["val1","val2",...]'
+  //   - An object with named fields
+  //   - A raw hex string (when ABI decode failed)
+  let data = raw
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      // Not JSON — treat as a single value
+    }
+  }
+
+  if (Array.isArray(data)) {
+    roundId = String(data[0])
+    answer = String(data[1])
+    updatedAt = String(data[3])
+  } else if (data && typeof data === 'object') {
+    roundId = String(data.roundId ?? data[0] ?? '0')
+    answer = String(data.answer ?? data[1] ?? '0')
+    updatedAt = String(data.updatedAt ?? data[3] ?? '0')
+  } else {
+    // Fallback: treat as a single value (the answer)
+    roundId = '0'
+    answer = String(data)
+    updatedAt = '0'
+  }
+
+  // Convert the raw integer answer to a decimal price string.
+  // Chainlink feeds return answer as an int256 scaled by 10^decimals.
+  const negative = answer.startsWith('-')
+  const absAnswer = negative ? answer.slice(1) : answer
+  const padded = absAnswer.padStart(decimals + 1, '0')
+  const whole = padded.slice(0, -decimals) || '0'
+  const frac = padded.slice(-decimals)
+  const price = `${negative ? '-' : ''}${whole}.${frac}`
+
+  return {
+    roundId,
+    answerRaw: answer,
+    price,
+    updatedAt,
   }
 }
 
 ;// CONCATENATED MODULE: ./src/main.js
 
 
-// TODO: Import your client and error class
 
 
 /**
- * W3 Action — command dispatch.
+ * W3 Chainlink Action — command dispatch.
  *
- * Each command handler is an async function that:
- *   1. Reads inputs via @actions/core
- *   2. Calls a method on your client
- *   3. Sets the JSON output via setJsonOutput
- *
- * createCommandRouter from @w3-io/action-core handles dispatch by command
- * name and reports unknown commands with the available list.
- *
- * To add a command:
- *   1. Write a handler in the `handlers` object below
- *   2. Add a matching method on your client
- *   3. Document it in action.yml, w3-action.yaml, and docs/guide.md
+ * Tier 1: Price Feeds + Proof of Reserve (bridge reads)
+ * Tier 2: CCIP (cross-chain orchestrated sends)
+ * Tier 3: VRF + Functions (subscription mgmt + async fulfillment)
+ * Tier 4: Data Streams (REST + on-chain verifier)
  */
 
-// TODO: Initialize your client
-function getClient() {
-  return new Client({
-    apiKey: lib_core.getInput('api-key', { required: true }),
-    baseUrl: lib_core.getInput('api-url') || undefined,
-  })
-}
-
 const handlers = {
-  // TODO: Replace with your commands
-  'example-command': async () => {
-    const client = getClient()
-    const input = lib_core.getInput('input', { required: true })
-    const result = await client.exampleCommand(input)
+  // ── Price Feeds ───────────────────────────────────────────────
+
+  'get-price': async () => {
+    const result = await getPrice(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'get-feed-info': async () => {
+    const result = await getFeedInfo(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'list-feeds': async () => {
+    const result = listFeeds(lib_core.getInput('chain', { required: true }))
+    setJsonOutput('result', result)
+  },
+
+  // ── Proof of Reserve ──────────────────────────────────────────
+
+  'por-get-reserves': async () => {
+    const result = await getReserves(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── CCIP ──────────────────────────────────────────────────────
+
+  'ccip-estimate-fee': async () => {
+    const tokenAmounts = lib_core.getInput('token-amounts')
+    const result = await ccipEstimateFee(
+      lib_core.getInput('source-chain', { required: true }),
+      lib_core.getInput('destination-chain', { required: true }),
+      {
+        receiver: lib_core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: lib_core.getInput('fee-token') || 'native',
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'ccip-send': async () => {
+    const tokenAmounts = lib_core.getInput('token-amounts')
+    const result = await ccipSend(
+      lib_core.getInput('source-chain', { required: true }),
+      lib_core.getInput('destination-chain', { required: true }),
+      {
+        receiver: lib_core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: lib_core.getInput('fee-token') || 'native',
+        gasLimit: lib_core.getInput('gas-limit') || '200000',
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── VRF ───────────────────────────────────────────────────────
+
+  'vrf-create-subscription': async () => {
+    const result = await vrfCreateSubscription(
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-fund-subscription': async () => {
+    const result = await vrfFundSubscription(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      {
+        amount: lib_core.getInput('amount', { required: true }),
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-get-subscription': async () => {
+    const result = await vrfGetSubscription(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-add-consumer': async () => {
+    const result = await vrfAddConsumer(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('consumer-contract', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-request': async () => {
+    const result = await vrfRequest(lib_core.getInput('chain', { required: true }), {
+      subscriptionId: lib_core.getInput('subscription-id', { required: true }),
+      numWords: Number(lib_core.getInput('num-words')) || 1,
+      callbackGasLimit: Number(lib_core.getInput('callback-gas-limit')) || 100000,
+      requestConfirmations: Number(lib_core.getInput('request-confirmations')) || 3,
+      rpcUrl: lib_core.getInput('rpc-url') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ── Functions ─────────────────────────────────────────────────
+
+  'functions-create-subscription': async () => {
+    const result = await functionsCreateSubscription(
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'functions-get-subscription': async () => {
+    const result = await functionsGetSubscription(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
     setJsonOutput('result', result)
   },
 }
 
 const router = createCommandRouter(handlers)
 
-/**
- * Top-level run wrapper. Catches structured client errors separately so
- * the partner-specific error code reaches `core.setFailed`, falling back
- * to action-core's generic handler for everything else.
- */
 async function run() {
   try {
     await router()
   } catch (error) {
-    if (error instanceof ClientError) {
-      lib_core.setFailed(`${error.code}: ${error.message}`)
+    if (error instanceof ChainlinkError) {
+      lib_core.setFailed(`Chainlink error (${error.code}): ${error.message}`)
     } else {
       handleError(error)
     }

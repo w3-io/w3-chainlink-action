@@ -1,56 +1,181 @@
 import * as core from '@actions/core'
 import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
-// TODO: Import your client and error class
-import { Client, ClientError } from './client.js'
+import {
+  getPrice,
+  getFeedInfo,
+  listFeeds,
+  getReserves,
+  ccipEstimateFee,
+  ccipSend,
+  vrfCreateSubscription,
+  vrfFundSubscription,
+  vrfGetSubscription,
+  vrfAddConsumer,
+  vrfRequest,
+  functionsCreateSubscription,
+  functionsGetSubscription,
+  ChainlinkError,
+} from './chainlink.js'
 
 /**
- * W3 Action — command dispatch.
+ * W3 Chainlink Action — command dispatch.
  *
- * Each command handler is an async function that:
- *   1. Reads inputs via @actions/core
- *   2. Calls a method on your client
- *   3. Sets the JSON output via setJsonOutput
- *
- * createCommandRouter from @w3-io/action-core handles dispatch by command
- * name and reports unknown commands with the available list.
- *
- * To add a command:
- *   1. Write a handler in the `handlers` object below
- *   2. Add a matching method on your client
- *   3. Document it in action.yml, w3-action.yaml, and docs/guide.md
+ * Tier 1: Price Feeds + Proof of Reserve (bridge reads)
+ * Tier 2: CCIP (cross-chain orchestrated sends)
+ * Tier 3: VRF + Functions (subscription mgmt + async fulfillment)
+ * Tier 4: Data Streams (REST + on-chain verifier)
  */
 
-// TODO: Initialize your client
-function getClient() {
-  return new Client({
-    apiKey: core.getInput('api-key', { required: true }),
-    baseUrl: core.getInput('api-url') || undefined,
-  })
-}
-
 const handlers = {
-  // TODO: Replace with your commands
-  'example-command': async () => {
-    const client = getClient()
-    const input = core.getInput('input', { required: true })
-    const result = await client.exampleCommand(input)
+  // ── Price Feeds ───────────────────────────────────────────────
+
+  'get-price': async () => {
+    const result = await getPrice(
+      core.getInput('pair', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'get-feed-info': async () => {
+    const result = await getFeedInfo(
+      core.getInput('pair', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'list-feeds': async () => {
+    const result = listFeeds(core.getInput('chain', { required: true }))
+    setJsonOutput('result', result)
+  },
+
+  // ── Proof of Reserve ──────────────────────────────────────────
+
+  'por-get-reserves': async () => {
+    const result = await getReserves(
+      core.getInput('pair', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── CCIP ──────────────────────────────────────────────────────
+
+  'ccip-estimate-fee': async () => {
+    const tokenAmounts = core.getInput('token-amounts')
+    const result = await ccipEstimateFee(
+      core.getInput('source-chain', { required: true }),
+      core.getInput('destination-chain', { required: true }),
+      {
+        receiver: core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: core.getInput('fee-token') || 'native',
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'ccip-send': async () => {
+    const tokenAmounts = core.getInput('token-amounts')
+    const result = await ccipSend(
+      core.getInput('source-chain', { required: true }),
+      core.getInput('destination-chain', { required: true }),
+      {
+        receiver: core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: core.getInput('fee-token') || 'native',
+        gasLimit: core.getInput('gas-limit') || '200000',
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── VRF ───────────────────────────────────────────────────────
+
+  'vrf-create-subscription': async () => {
+    const result = await vrfCreateSubscription(
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-fund-subscription': async () => {
+    const result = await vrfFundSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        amount: core.getInput('amount', { required: true }),
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-get-subscription': async () => {
+    const result = await vrfGetSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-add-consumer': async () => {
+    const result = await vrfAddConsumer(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('consumer-contract', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-request': async () => {
+    const result = await vrfRequest(core.getInput('chain', { required: true }), {
+      subscriptionId: core.getInput('subscription-id', { required: true }),
+      numWords: Number(core.getInput('num-words')) || 1,
+      callbackGasLimit: Number(core.getInput('callback-gas-limit')) || 100000,
+      requestConfirmations: Number(core.getInput('request-confirmations')) || 3,
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ── Functions ─────────────────────────────────────────────────
+
+  'functions-create-subscription': async () => {
+    const result = await functionsCreateSubscription(
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'functions-get-subscription': async () => {
+    const result = await functionsGetSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
     setJsonOutput('result', result)
   },
 }
 
 const router = createCommandRouter(handlers)
 
-/**
- * Top-level run wrapper. Catches structured client errors separately so
- * the partner-specific error code reaches `core.setFailed`, falling back
- * to action-core's generic handler for everything else.
- */
 export async function run() {
   try {
     await router()
   } catch (error) {
-    if (error instanceof ClientError) {
-      core.setFailed(`${error.code}: ${error.message}`)
+    if (error instanceof ChainlinkError) {
+      core.setFailed(`Chainlink error (${error.code}): ${error.message}`)
     } else {
       handleError(error)
     }

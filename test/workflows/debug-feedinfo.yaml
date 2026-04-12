@@ -1,0 +1,17 @@
+name: Debug Feed Info
+on:
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: info
+        with:
+          command: get-feed-info
+          pair: ETH/USD
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - run: echo '${{ steps.info.outputs.result }}'
