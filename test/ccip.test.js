@@ -139,8 +139,8 @@ describe('ccipSend', () => {
     })
 
     const args = bridgeCalls[0].params.args
-    // args[1] is the message tuple: [receiver, data, tokenAmounts[], feeToken, extraArgs]
-    assert.equal(args[1][2][0][1], '500')
+    // args[1] is a parenthesized tuple string for coerce_str
+    assert.ok(args[1].includes('500'))
   })
 
   it('sends with empty tokenAmounts for message-only transfers', async () => {
@@ -153,8 +153,8 @@ describe('ccipSend', () => {
 
     assert.equal(result.status, 'sent')
     const args = bridgeCalls[0].params.args
-    // args[1][2] is the tokenAmounts array in the positional tuple
-    assert.deepEqual(args[1][2], [])
+    // args[1] is a tuple string with empty tokenAmounts: [..., [], ...]
+    assert.ok(args[1].includes('[]'))
   })
 
   it('uses the correct testnet router and selector', async () => {

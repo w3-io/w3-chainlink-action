@@ -28974,14 +28974,11 @@ function resolveFeeToken(feeToken, sourceChain) {
 function buildCcipMessage(receiver, data, tokenAmounts, feeToken, _gasLimit) {
   // CCIP receiver is bytes — for EVM destinations, ABI-encode the address to 32 bytes
   const encodedReceiver = '0x' + receiver.replace(/^0x/, '').toLowerCase().padStart(64, '0')
-  // Return as positional tuple matching (bytes, bytes, (address, uint256)[], address, bytes)
-  return [
-    encodedReceiver,                                                   // bytes receiver
-    data || '0x',                                                      // bytes data
-    tokenAmounts.map((ta) => [ta.token, String(ta.amount)]),           // (address, uint256)[]
-    feeToken,                                                          // address feeToken
-    '0x',                                                              // bytes extraArgs
-  ]
+  // Format as parenthesized tuple string for DynSolType::coerce_str.
+  // The bridge converts non-string args via JSON.stringify, but coerce_str
+  // expects tuple syntax: (val1, val2, ...) not [val1, val2, ...]
+  const amounts = tokenAmounts.map((ta) => `(${ta.token}, ${ta.amount})`).join(', ')
+  return `(${encodedReceiver}, ${data || '0x'}, [${amounts}], ${feeToken}, 0x)`
 }
 
 /**

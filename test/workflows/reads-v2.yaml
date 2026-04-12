@@ -1,4 +1,4 @@
-name: Chainlink Reads v4
+name: Chainlink Reads v5
 on:
   workflow_dispatch: {}
 
