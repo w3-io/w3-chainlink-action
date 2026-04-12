@@ -28683,17 +28683,33 @@ async function ccipSend(
 
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken, gasLimit)
 
+  // For native fee payment, estimate the fee first and send as msg.value
+  let value
+  if (resolvedFeeToken === '0x0000000000000000000000000000000000000000') {
+    const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
+      contract: router,
+      method: CCIP_INTERFACE.getFee,
+      abi: CCIP_ABI,
+      args: [destSelector, message],
+      ...srcNet.params,
+    }, srcNet.network))
+    // Add 10% buffer for fee fluctuation
+    value = String(BigInt(fee) + BigInt(fee) / 10n)
+  }
+
   const receipt = await bridge.chain('ethereum', 'call-contract', {
     contract: router,
     method: CCIP_INTERFACE.ccipSend,
     abi: CCIP_ABI,
     args: [destSelector, message],
+    ...(value ? { value } : {}),
     ...srcNet.params,
   }, srcNet.network)
 
   return {
     status: 'sent',
     txHash: extractTxHash(receipt),
+    fee: value || '0',
     sourceChain,
     destinationChain,
     router,

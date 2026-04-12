@@ -1,4 +1,4 @@
-name: Chainlink CCIP Send v1
+name: Chainlink CCIP Send v5
 on:
   workflow_dispatch: {}
 
