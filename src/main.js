@@ -1,6 +1,14 @@
 import * as core from '@actions/core'
 import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-core'
-import { getPrice, getFeedInfo, listFeeds, ChainlinkError } from './chainlink.js'
+import {
+  getPrice,
+  getFeedInfo,
+  listFeeds,
+  getReserves,
+  ccipEstimateFee,
+  ccipSend,
+  ChainlinkError,
+} from './chainlink.js'
 
 /**
  * W3 Chainlink Action — command dispatch.
@@ -32,6 +40,47 @@ const handlers = {
 
   'list-feeds': async () => {
     const result = listFeeds(core.getInput('chain', { required: true }))
+    setJsonOutput('result', result)
+  },
+
+  // ── Proof of Reserve ──────────────────────────────────────────
+
+  'por-get-reserves': async () => {
+    const result = await getReserves(
+      core.getInput('pair', { required: true }),
+      core.getInput('chain', { required: true }),
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── CCIP ──────────────────────────────────────────────────────
+
+  'ccip-estimate-fee': async () => {
+    const tokenAmounts = core.getInput('token-amounts')
+    const result = await ccipEstimateFee(
+      core.getInput('source-chain', { required: true }),
+      core.getInput('destination-chain', { required: true }),
+      {
+        receiver: core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: core.getInput('fee-token') || 'native',
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'ccip-send': async () => {
+    const tokenAmounts = core.getInput('token-amounts')
+    const result = await ccipSend(
+      core.getInput('source-chain', { required: true }),
+      core.getInput('destination-chain', { required: true }),
+      {
+        receiver: core.getInput('receiver', { required: true }),
+        tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
+        feeToken: core.getInput('fee-token') || 'native',
+        gasLimit: core.getInput('gas-limit') || '200000',
+      },
+    )
     setJsonOutput('result', result)
   },
 }

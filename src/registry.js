@@ -138,6 +138,24 @@ export const FEEDS = {
   },
 }
 
+// ── Proof of Reserve feed addresses ────────────────────────────────
+
+/**
+ * Proof of Reserve feeds. Same AggregatorV3Interface as price feeds.
+ * The `answer` field represents total reserves (not a price). Units
+ * depend on the asset (e.g., satoshis for BTC reserves, base units for
+ * USDC). Always call decimals() to confirm.
+ *
+ * No programmatic on-chain way to distinguish PoR from price feeds —
+ * you must know from the documentation. description() typically
+ * contains "Reserves" or "PoR".
+ */
+export const POR_FEEDS = {
+  ethereum: {
+    'WBTC/BTC': '0xa81FE04086865e63E12dD3776978E49DEEa2ea4e',
+  },
+}
+
 // ── CCIP configuration ─────────────────────────────────────────────
 
 /**
@@ -173,6 +191,22 @@ export const CCIP = {
     fuji: '14767482510784806043',
     amoy: '16281711391670634445',
   },
+}
+
+/**
+ * LINK token addresses per chain (needed for CCIP fee payment).
+ * address(0) means "pay in native" — the router accepts msg.value.
+ */
+export const LINK_TOKENS = {
+  ethereum: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
+  arbitrum: '0xf97f4df75117a78c1A5a0DBb814Af92458539FB4',
+  base: '0x88Fb150BDc53A65fe94Dea0c9BA0a6dAf8C6e196',
+  polygon: '0xb0897686c545045aFc77CF20eC7A532E3120E0F1',
+  avalanche: '0x5947BB275c521040051D82396192181b413227A3',
+  optimism: '0x350a791Bfc2C21F9Ed5d10980Dad2e2638ffa7f6',
+  // Testnets
+  sepolia: '0x779877A7B0D9E8603169DdbD7836e478b4624789',
+  fuji: '0x0b9d5D9136855f6FEc3c0993feE6E9CE8a297846',
 }
 
 /**
