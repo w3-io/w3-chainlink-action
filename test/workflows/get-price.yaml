@@ -1,4 +1,4 @@
-name: Chainlink Price Test v3
+name: Chainlink Price Test v4
 on:
   workflow_dispatch: {}
 

@@ -28959,18 +28959,32 @@ function lookupFeed(pair, chain) {
 function parseRoundData(raw, decimals) {
   let roundId, answer, updatedAt
 
-  if (Array.isArray(raw)) {
-    roundId = String(raw[0])
-    answer = String(raw[1])
-    updatedAt = String(raw[3])
-  } else if (raw && typeof raw === 'object') {
-    roundId = String(raw.roundId ?? raw[0] ?? '0')
-    answer = String(raw.answer ?? raw[1] ?? '0')
-    updatedAt = String(raw.updatedAt ?? raw[3] ?? '0')
+  // The bridge may return:
+  //   - A real JS array [roundId, answer, startedAt, updatedAt, answeredInRound]
+  //   - A JSON-encoded string: '["val1","val2",...]'
+  //   - An object with named fields
+  //   - A raw hex string (when ABI decode failed)
+  let data = raw
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      // Not JSON — treat as a single value
+    }
+  }
+
+  if (Array.isArray(data)) {
+    roundId = String(data[0])
+    answer = String(data[1])
+    updatedAt = String(data[3])
+  } else if (data && typeof data === 'object') {
+    roundId = String(data.roundId ?? data[0] ?? '0')
+    answer = String(data.answer ?? data[1] ?? '0')
+    updatedAt = String(data.updatedAt ?? data[3] ?? '0')
   } else {
     // Fallback: treat as a single value (the answer)
     roundId = '0'
-    answer = String(raw)
+    answer = String(data)
     updatedAt = '0'
   }
 
