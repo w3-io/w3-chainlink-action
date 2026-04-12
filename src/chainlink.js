@@ -345,17 +345,17 @@ export async function ccipSend(
 
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken, gasLimit)
 
-  const messageId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
     contract: router,
     method: CCIP_INTERFACE.ccipSend,
     abi: CCIP_ABI,
     args: [destSelector, message],
     ...srcNet.params,
-  }, srcNet.network))
+  }, srcNet.network)
 
   return {
     status: 'sent',
-    messageId: String(messageId),
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
     sourceChain,
     destinationChain,
     router,
@@ -372,14 +372,23 @@ export async function vrfCreateSubscription(chain, { rpcUrl } = {}) {
   const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
-  const subId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.createSubscription,
     args: [],
     ...net.params,
-  }, net.network))
+  }, net.network)
 
-  return { subscriptionId: String(subId), coordinator, chain }
+  // call-contract returns a tx receipt. Parse the subscription ID from
+  // the SubscriptionCreated event log or fall back to the tx hash.
+  const subId = parseSubscriptionIdFromReceipt(receipt)
+
+  return {
+    subscriptionId: subId,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    coordinator,
+    chain,
+  }
 }
 
 /**
@@ -429,14 +438,20 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl }
   const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
 
-  unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.addConsumer,
     args: [subscriptionId, consumer],
     ...net.params,
-  }, net.network))
+  }, net.network)
 
-  return { subscriptionId, consumer, coordinator, chain }
+  return {
+    subscriptionId,
+    consumer,
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
+    coordinator,
+    chain,
+  }
 }
 
 /**
@@ -453,7 +468,7 @@ export async function vrfRequest(
   const coordinator = lookupVrfCoordinator(chain)
   const keyHash = lookupVrfKeyHash(chain)
 
-  const requestId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
+  const receipt = await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.requestRandomWords,
     args: [
@@ -465,10 +480,10 @@ export async function vrfRequest(
       '0x', // extraArgs (empty = pay in LINK)
     ],
     ...net.params,
-  }, net.network))
+  }, net.network)
 
   return {
-    requestId: String(requestId),
+    txHash: receipt?.tx_hash || receipt?.txHash || String(receipt),
     subscriptionId,
     numWords,
     coordinator,
@@ -512,6 +527,31 @@ export async function functionsGetSubscription(subscriptionId, chain, { rpcUrl }
 }
 
 // ── Internal helpers ───────────────────────────────────────────────
+
+/**
+ * Parse the subscription ID from a VRF createSubscription receipt.
+ *
+ * The coordinator emits SubscriptionCreated(uint256 subId, address owner).
+ * Topic[0] = keccak256("SubscriptionCreated(uint256,address)")
+ * Topic[1] = subId (indexed)
+ */
+function parseSubscriptionIdFromReceipt(receipt) {
+  // The receipt may be the raw bridge response object
+  const logs = receipt?.logs_json || receipt?.logs || receipt?.logsJson
+  if (logs) {
+    const logArr = typeof logs === 'string' ? JSON.parse(logs) : logs
+    // SubscriptionCreated event topic
+    const topic = '0x464722b4166576d3dcbba877b999bc35cf911f4eaf434b7eba68fa113951d0d7'
+    for (const log of logArr) {
+      const topics = log.topics || []
+      if (topics[0] === topic && topics[1]) {
+        return BigInt(topics[1]).toString()
+      }
+    }
+  }
+  // Fallback: return the whole receipt as a string for debugging
+  return JSON.stringify(receipt)
+}
 
 /**
  * Look up the VRF coordinator address for a chain.

@@ -1,0 +1,23 @@
+name: Chainlink Writes v3
+on:
+  workflow_dispatch: {}
+
+jobs:
+  writes:
+    runs-on: ubuntu-latest
+    steps:
+      # ── VRF: Create subscription ─────────────────────────────
+      - uses: w3-io/w3-chainlink-action@audie/tier-1-price-feeds
+        id: vrf-create
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: vrf-create-subscription
+          chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
+
+      - run: |
+          echo "=== VRF Create Subscription ==="
+          echo "Result: ${{ steps.vrf-create.outputs.result }}"

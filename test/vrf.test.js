@@ -40,11 +40,20 @@ function mockBridge(responses) {
 
 describe('vrfCreateSubscription', () => {
   it('calls createSubscription on the coordinator and returns the subId', async () => {
-    mockBridge([{ value: '42' }])
+    // Mock a receipt with SubscriptionCreated event log
+    const subCreatedTopic = '0x464722b4166576d3dcbba877b999bc35cf911f4eaf434b7eba68fa113951d0d7'
+    const subIdTopic = '0x000000000000000000000000000000000000000000000000000000000000002a' // 42
+    mockBridge([{
+      value: {
+        tx_hash: '0xabc123',
+        logs_json: JSON.stringify([{ topics: [subCreatedTopic, subIdTopic] }]),
+      },
+    }])
 
     const result = await vrfCreateSubscription('sepolia')
 
     assert.equal(result.subscriptionId, '42')
+    assert.equal(result.txHash, '0xabc123')
     assert.equal(result.coordinator, '0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B')
     assert.equal(result.chain, 'sepolia')
     assert.equal(bridgeCalls[0].operation, 'call-contract')
@@ -93,12 +102,13 @@ describe('vrfGetSubscription', () => {
 
 describe('vrfAddConsumer', () => {
   it('calls addConsumer on the coordinator', async () => {
-    mockBridge([{ value: undefined }]) // void return
+    mockBridge([{ value: { tx_hash: '0xdef456' } }])
 
     const result = await vrfAddConsumer('42', '0xMyContract', 'sepolia')
 
     assert.equal(result.subscriptionId, '42')
     assert.equal(result.consumer, '0xMyContract')
+    assert.equal(result.txHash, '0xdef456')
     assert.equal(bridgeCalls[0].operation, 'call-contract')
     const args = bridgeCalls[0].params.args
     assert.equal(args[0], '42')
@@ -115,7 +125,7 @@ describe('vrfAddConsumer', () => {
 
 describe('vrfRequest', () => {
   it('requests random words from the coordinator', async () => {
-    mockBridge([{ value: '12345' }])
+    mockBridge([{ value: { tx_hash: '0xreq123' } }])
 
     const result = await vrfRequest('sepolia', {
       subscriptionId: '42',
@@ -124,7 +134,7 @@ describe('vrfRequest', () => {
       requestConfirmations: 5,
     })
 
-    assert.equal(result.requestId, '12345')
+    assert.equal(result.txHash, '0xreq123')
     assert.equal(result.subscriptionId, '42')
     assert.equal(result.numWords, 3)
     assert.equal(bridgeCalls[0].operation, 'call-contract')
@@ -139,7 +149,7 @@ describe('vrfRequest', () => {
   })
 
   it('uses defaults for optional params', async () => {
-    mockBridge([{ value: '99' }])
+    mockBridge([{ value: { tx_hash: '0x99' } }])
 
     const result = await vrfRequest('sepolia', { subscriptionId: '1' })
 

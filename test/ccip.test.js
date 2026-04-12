@@ -110,8 +110,8 @@ describe('ccipEstimateFee', () => {
 })
 
 describe('ccipSend', () => {
-  it('calls ccipSend on the router and returns a message ID', async () => {
-    mockBridge([{ value: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890' }])
+  it('calls ccipSend on the router and returns a tx hash', async () => {
+    mockBridge([{ value: { tx_hash: '0xabcdef1234567890' } }])
 
     const result = await ccipSend('ethereum', 'arbitrum', {
       receiver: '0xRecipient',
@@ -119,10 +119,7 @@ describe('ccipSend', () => {
     })
 
     assert.equal(result.status, 'sent')
-    assert.equal(
-      result.messageId,
-      '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
-    )
+    assert.equal(result.txHash, '0xabcdef1234567890')
     assert.equal(result.sourceChain, 'ethereum')
     assert.equal(result.destinationChain, 'arbitrum')
 
@@ -131,7 +128,7 @@ describe('ccipSend', () => {
   })
 
   it('formats token amounts as strings', async () => {
-    mockBridge([{ value: '0x123' }])
+    mockBridge([{ value: { tx_hash: '0x123' } }])
 
     await ccipSend('sepolia', 'arbitrum-sepolia', {
       receiver: '0xRecipient',
@@ -144,7 +141,7 @@ describe('ccipSend', () => {
   })
 
   it('sends with empty tokenAmounts for message-only transfers', async () => {
-    mockBridge([{ value: '0x456' }])
+    mockBridge([{ value: { tx_hash: '0x456' } }])
 
     const result = await ccipSend('ethereum', 'base', {
       receiver: '0xRecipient',
@@ -158,7 +155,7 @@ describe('ccipSend', () => {
   })
 
   it('uses the correct testnet router and selector', async () => {
-    mockBridge([{ value: '0x789' }])
+    mockBridge([{ value: { tx_hash: '0x789' } }])
 
     await ccipSend('sepolia', 'fuji', {
       receiver: '0xRecipient',
