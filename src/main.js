@@ -7,6 +7,11 @@ import {
   getReserves,
   ccipEstimateFee,
   ccipSend,
+  vrfCreateSubscription,
+  vrfGetSubscription,
+  vrfAddConsumer,
+  vrfRequest,
+  functionsGetSubscription,
   ChainlinkError,
 } from './chainlink.js'
 
@@ -80,6 +85,50 @@ const handlers = {
         feeToken: core.getInput('fee-token') || 'native',
         gasLimit: core.getInput('gas-limit') || '200000',
       },
+    )
+    setJsonOutput('result', result)
+  },
+
+  // ── VRF ───────────────────────────────────────────────────────
+
+  'vrf-create-subscription': async () => {
+    const result = await vrfCreateSubscription(core.getInput('chain', { required: true }))
+    setJsonOutput('result', result)
+  },
+
+  'vrf-get-subscription': async () => {
+    const result = await vrfGetSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-add-consumer': async () => {
+    const result = await vrfAddConsumer(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('consumer-contract', { required: true }),
+      core.getInput('chain', { required: true }),
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-request': async () => {
+    const result = await vrfRequest(core.getInput('chain', { required: true }), {
+      subscriptionId: core.getInput('subscription-id', { required: true }),
+      numWords: Number(core.getInput('num-words')) || 1,
+      callbackGasLimit: Number(core.getInput('callback-gas-limit')) || 100000,
+      requestConfirmations: Number(core.getInput('request-confirmations')) || 3,
+    })
+    setJsonOutput('result', result)
+  },
+
+  // ── Functions ─────────────────────────────────────────────────
+
+  'functions-get-subscription': async () => {
+    const result = await functionsGetSubscription(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('chain', { required: true }),
     )
     setJsonOutput('result', result)
   },

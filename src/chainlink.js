@@ -31,6 +31,9 @@ import {
   CCIP,
   CCIP_INTERFACE,
   LINK_TOKENS,
+  VRF,
+  VRF_INTERFACE,
+  FUNCTIONS,
 } from './registry.js'
 
 /**
@@ -307,7 +310,197 @@ export async function ccipSend(
   }
 }
 
+// ── VRF (Verifiable Random Function) ───────────────────────────────
+
+/**
+ * Create a new VRF subscription.
+ */
+export async function vrfCreateSubscription(chain) {
+  const net = resolveNetwork(chain)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const subId = await bridge.chain('ethereum', 'call-contract', {
+    contractAddress: coordinator,
+    functionSignature: VRF_INTERFACE.createSubscription,
+    args: '[]',
+    ...net.bridgeParams,
+  })
+
+  return { subscriptionId: String(subId), coordinator, chain }
+}
+
+/**
+ * Get VRF subscription details.
+ */
+export async function vrfGetSubscription(subscriptionId, chain) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const sub = await bridge.chain('ethereum', 'read-contract', {
+    contractAddress: coordinator,
+    functionSignature: VRF_INTERFACE.getSubscription,
+    args: JSON.stringify([subscriptionId]),
+    ...net.bridgeParams,
+  })
+
+  // Normalize the return value
+  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
+  const nativeBalance = Array.isArray(sub) ? sub[1] : sub?.nativeBalance
+  const reqCount = Array.isArray(sub) ? sub[2] : sub?.reqCount
+  const owner = Array.isArray(sub) ? sub[3] : sub?.subOwner
+  const consumers = Array.isArray(sub) ? sub[4] : sub?.consumers
+
+  return {
+    subscriptionId,
+    chain,
+    coordinator,
+    balance: String(balance ?? '0'),
+    nativeBalance: String(nativeBalance ?? '0'),
+    requestCount: String(reqCount ?? '0'),
+    owner: String(owner ?? ''),
+    consumers: Array.isArray(consumers) ? consumers.map(String) : [],
+  }
+}
+
+/**
+ * Add a consumer contract to a VRF subscription.
+ */
+export async function vrfAddConsumer(subscriptionId, consumer, chain) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  await bridge.chain('ethereum', 'call-contract', {
+    contractAddress: coordinator,
+    functionSignature: VRF_INTERFACE.addConsumer,
+    args: JSON.stringify([subscriptionId, consumer]),
+    ...net.bridgeParams,
+  })
+
+  return { subscriptionId, consumer, coordinator, chain }
+}
+
+/**
+ * Request random words from VRF v2.5.
+ */
+export async function vrfRequest(
+  chain,
+  { subscriptionId, numWords = 1, callbackGasLimit = 100000, requestConfirmations = 3 } = {},
+) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain)
+  const coordinator = lookupVrfCoordinator(chain)
+  const keyHash = lookupVrfKeyHash(chain)
+
+  const requestId = await bridge.chain('ethereum', 'call-contract', {
+    contractAddress: coordinator,
+    functionSignature: VRF_INTERFACE.requestRandomWords,
+    args: JSON.stringify([
+      keyHash,
+      subscriptionId,
+      requestConfirmations,
+      callbackGasLimit,
+      numWords,
+      '0x', // extraArgs (empty = pay in LINK)
+    ]),
+    ...net.bridgeParams,
+  })
+
+  return {
+    requestId: String(requestId),
+    subscriptionId,
+    numWords,
+    coordinator,
+    chain,
+  }
+}
+
+// ── Functions (Chainlink Functions) ────────────────────────────────
+
+/**
+ * Get a Chainlink Functions subscription.
+ */
+export async function functionsGetSubscription(subscriptionId, chain) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+
+  const net = resolveNetwork(chain)
+  const router = lookupFunctionsRouter(chain)
+
+  // Functions uses a different getSubscription signature than VRF
+  const sub = await bridge.chain('ethereum', 'read-contract', {
+    contractAddress: router,
+    functionSignature:
+      'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
+    args: JSON.stringify([subscriptionId]),
+    ...net.bridgeParams,
+  })
+
+  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
+  const owner = Array.isArray(sub) ? sub[1] : sub?.owner
+  const consumers = Array.isArray(sub) ? sub[3] : sub?.consumers
+
+  return {
+    subscriptionId,
+    chain,
+    router,
+    balance: String(balance ?? '0'),
+    owner: String(owner ?? ''),
+    consumers: Array.isArray(consumers) ? consumers.map(String) : [],
+  }
+}
+
 // ── Internal helpers ───────────────────────────────────────────────
+
+/**
+ * Look up the VRF coordinator address for a chain.
+ */
+function lookupVrfCoordinator(chain) {
+  const addr = VRF.coordinators[chain.toLowerCase()]
+  if (!addr) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No VRF coordinator for chain "${chain}". Available: ${Object.keys(VRF.coordinators).join(', ')}`,
+    )
+  }
+  return addr
+}
+
+/**
+ * Look up the VRF key hash for a chain.
+ */
+function lookupVrfKeyHash(chain) {
+  const hash = VRF.keyHashes[chain.toLowerCase()]
+  if (!hash) {
+    throw new ChainlinkError(
+      'MISSING_KEY_HASH',
+      `No VRF key hash registered for chain "${chain}". Available: ${Object.keys(VRF.keyHashes).join(', ')}`,
+    )
+  }
+  return hash
+}
+
+/**
+ * Look up the Functions router address for a chain.
+ */
+function lookupFunctionsRouter(chain) {
+  const addr = FUNCTIONS.routers[chain.toLowerCase()]
+  if (!addr) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No Functions router for chain "${chain}". Available: ${Object.keys(FUNCTIONS.routers).join(', ')}`,
+    )
+  }
+  return addr
+}
 
 /**
  * Look up a PoR feed address from the registry.
