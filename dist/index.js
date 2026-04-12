@@ -27545,7 +27545,7 @@ function setOutputs(outputs) {
 /**
  * Structured error with code, message, and optional details.
  */
-class W3ActionError extends Error {
+class error_W3ActionError extends Error {
     code;
     statusCode;
     details;
@@ -27564,7 +27564,7 @@ class W3ActionError extends Error {
  *   main().catch(handleError);
  */
 function handleError(error) {
-    if (error instanceof W3ActionError) {
+    if (error instanceof error_W3ActionError) {
         lib_core.setOutput("error-code", error.code);
         if (error.statusCode)
             lib_core.setOutput("status-code", error.statusCode);
@@ -27705,10 +27705,10 @@ async function bridgeRequest(path, body) {
                     if (!res.statusCode || res.statusCode >= 400) {
                         try {
                             const err = JSON.parse(data);
-                            reject(new W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
+                            reject(new error_W3ActionError(err.code ?? "BRIDGE_ERROR", err.error ?? `Bridge returned ${res.statusCode}`, { statusCode: res.statusCode, details: err }));
                         }
                         catch {
-                            reject(new W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
+                            reject(new error_W3ActionError("BRIDGE_ERROR", data || `HTTP ${res.statusCode}`, { statusCode: res.statusCode }));
                         }
                         return;
                     }
@@ -27720,7 +27720,7 @@ async function bridgeRequest(path, body) {
                     }
                 });
             });
-            req.on("error", (err) => reject(new W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
+            req.on("error", (err) => reject(new error_W3ActionError("BRIDGE_UNAVAILABLE", err.message)));
             if (payload)
                 req.write(payload);
             req.end();
@@ -27743,7 +27743,7 @@ async function bridgeRequest(path, body) {
         catch {
             // not JSON
         }
-        throw new W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
+        throw new error_W3ActionError(parsed?.code ?? "BRIDGE_ERROR", parsed?.error ?? text ?? `Bridge returned ${res.status}`, { statusCode: res.status, details: parsed });
     }
     try {
         return JSON.parse(text);
@@ -27994,145 +27994,534 @@ function createMockCore() {
 
 
 
-;// CONCATENATED MODULE: ./src/client.js
+;// CONCATENATED MODULE: ./src/registry.js
 /**
- * TODO: Rename this file to match your partner (e.g. cube3.js, stripe.js).
+ * Chainlink contract address registry.
  *
- * This is your API client — the core logic of the action. It should:
+ * Maps (pair, chain) to feed contract addresses and provides the ABI
+ * function signatures needed to interact with each product.
  *
- *   1. Be independent of @actions/core (no imports from it here).
- *   2. Use `request` from @w3-io/action-core for HTTP — handles
- *      timeout, retry on 429/5xx, and structured errors.
- *   3. Throw your partner-specific error class (extends W3ActionError)
- *      on failures with machine-readable codes.
- *   4. Return clean, well-structured objects.
+ * Sources:
+ *   - Price Feeds: https://docs.chain.link/data-feeds/price-feeds/addresses
+ *   - CCIP: https://docs.chain.link/ccip/supported-networks
+ *   - VRF: https://docs.chain.link/vrf/v2-5/supported-networks
+ *   - Functions: https://docs.chain.link/chainlink-functions/supported-networks
  *
- * Pattern:
- *   - Constructor takes config (apiKey, baseUrl)
- *   - One public method per command
- *   - Private helpers for formatting, parsing
+ * This file is the source of truth for all contract addresses the action
+ * uses. Keep it up to date when Chainlink deploys new feeds or upgrades
+ * contracts. The `list-feeds` and `list-chains` commands surface this
+ * data directly to workflow authors.
+ */
+
+// ── AggregatorV3Interface ──────────────────────────────────────────
+
+const FEED_INTERFACE = {
+  latestRoundData:
+    'function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
+  decimals: 'function decimals() external view returns (uint8)',
+  description: 'function description() external view returns (string)',
+  getRoundData:
+    'function getRoundData(uint80 _roundId) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
+}
+
+// ── Network configuration ──────────────────────────────────────────
+
+/**
+ * Network mapping: common name → bridge params.
+ *
+ * The bridge's `chain` operation needs to know which network to target.
+ * The exact param shape depends on the bridge's chain provider
+ * implementation. For most EVM chains, passing the network name or
+ * chain ID is sufficient.
+ */
+const NETWORKS = {
+  // Mainnets
+  ethereum: { bridgeParams: {}, chainName: 'ethereum', chainId: 1 },
+  base: { bridgeParams: { network: 'base' }, chainName: 'base', chainId: 8453 },
+  arbitrum: { bridgeParams: { network: 'arbitrum' }, chainName: 'arbitrum', chainId: 42161 },
+  optimism: { bridgeParams: { network: 'optimism' }, chainName: 'optimism', chainId: 10 },
+  polygon: { bridgeParams: { network: 'polygon' }, chainName: 'polygon', chainId: 137 },
+  avalanche: { bridgeParams: { network: 'avalanche' }, chainName: 'avalanche', chainId: 43114 },
+
+  // Testnets
+  sepolia: { bridgeParams: { network: 'sepolia' }, chainName: 'sepolia', chainId: 11155111 },
+  'base-sepolia': {
+    bridgeParams: { network: 'base-sepolia' },
+    chainName: 'base-sepolia',
+    chainId: 84532,
+  },
+  'arbitrum-sepolia': {
+    bridgeParams: { network: 'arbitrum-sepolia' },
+    chainName: 'arbitrum-sepolia',
+    chainId: 421614,
+  },
+  fuji: { bridgeParams: { network: 'fuji' }, chainName: 'fuji', chainId: 43113 },
+  amoy: { bridgeParams: { network: 'amoy' }, chainName: 'amoy', chainId: 80002 },
+}
+
+// ── Price Feed addresses ───────────────────────────────────────────
+
+/**
+ * Feed registry: chain → { pair → address }
+ *
+ * Pairs are stored uppercase with no spaces: "ETH/USD", "BTC/USD".
+ * Addresses are checksummed.
+ *
+ * This is a curated subset of the most commonly used feeds. Workflow
+ * authors who need a feed not listed here can pass the contract address
+ * directly via the `feed-address` input (bypass the registry).
+ */
+const FEEDS = {
+  ethereum: {
+    'ETH/USD': '0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419',
+    'BTC/USD': '0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c',
+    'LINK/USD': '0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c',
+    'USDC/USD': '0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6',
+    'DAI/USD': '0xAed0c38402a5d19df6E4c03F4E2DceD6e29c1ee9',
+    'USDT/USD': '0x3E7d1eAB13ad0104d2750B8863b489D65364e32D',
+    'SOL/USD': '0x4ffC43a60e009B551865A93d232E33Fce9f01507',
+    'AVAX/USD': '0xFF3EEb22B5E3dE6e705b44749C2559d704923FD7',
+    'MATIC/USD': '0x7bAC85A8a13A4BcD8abb3eB7d6b4d632c5a57676',
+    'ARB/USD': '0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6',
+    'OP/USD': '0x0D276FC14719f9292D5C1eA2198673d1f4269246',
+    'AAVE/USD': '0x547a514d5e3769680Ce22B2361c10Ea13619e8a9',
+    'UNI/USD': '0x553303d460EE0afB37EdFf9bE42922D8FF63220e',
+    'COMP/USD': '0xdbd020CAeF83eFd542f4De03e3cF0C28A4428bd5',
+    'MKR/USD': '0xec1D1B3b0443256cc3860e24a46F108e699484Aa',
+    'SNX/USD': '0xDC3EA94CD0AC27d9A86C180091e7f78C683d3699',
+    'CRV/USD': '0xCd627aA160A6fA45Eb793D19Ef54f5062F20f33f',
+    'DOGE/USD': '0x2465CefD3b488BE410b941b1d4b2767088e2A028',
+    'SHIB/USD': '0x8dD1CD88F43aF196ae478e91b9F5E4Ac69A97C61',
+    'LTC/USD': '0x6AF09DF7563C363B5763b9de2B36e3A185714c5b',
+    'XRP/USD': '0xCed2660c6Dd1Ffd856A5A82C67f3482d88C50b12',
+    'DOT/USD': '0x1C07AFb8E2B827c5A4739C6d59Ae3A5035f28734',
+    'ATOM/USD': '0xDC4BDB458C6361093069Ca2aD30D74cc152EdC75',
+    'FIL/USD': '0x1A31D42149e82Eb99777f903C08A2E41A00085d3',
+  },
+  sepolia: {
+    'ETH/USD': '0x694AA1769357215DE4FAC081bf1f309aDC325306',
+    'BTC/USD': '0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43',
+    'LINK/USD': '0xc59E3633BAAC79493d908e63626716e204A45EdF',
+    'USDC/USD': '0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E',
+    'DAI/USD': '0x14866185B1962B63C3Ea9E03Bc1da838bab34C19',
+  },
+  base: {
+    'ETH/USD': '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70',
+    'BTC/USD': '0x64c911996D3c6aC71f9b455B1E8E7266BcbD848F',
+    'LINK/USD': '0x17CAb8FE31cA45e1ab3ACC27e678a47D9CDca516',
+    'USDC/USD': '0x7e860098F58bBFC8648a4311b374B1D669a2bc6B',
+    'CBETH/USD': '0xd7818272B9e248357d13057AAb0B417aF31E817d',
+  },
+  arbitrum: {
+    'ETH/USD': '0x639Fe6ab55C921f74e7fac1ee960C0B6293ba612',
+    'BTC/USD': '0x6ce185860a4963106506C203335A2910413708e9',
+    'LINK/USD': '0x86E53CF1B870786351Da77A57575e79CB55812CB',
+    'USDC/USD': '0x50834F3163758fcC1Df9973b6e91f0F0F0434aD3',
+    'ARB/USD': '0xb2A824043730FE05F3DA2efaFa1CBbe83fa548D6',
+  },
+  polygon: {
+    'ETH/USD': '0xF9680D99D6C9589e2a93a78A04A279e509205945',
+    'BTC/USD': '0xc907E116054Ad103354f2D350FD2514433D57F6f',
+    'LINK/USD': '0xd9FFdb71EbE7496cC440152d43986Aae0AB76665',
+    'MATIC/USD': '0xAB594600376Ec9fD91F8e8dC60a760E1142F1eE1',
+    'USDC/USD': '0xfE4A8cc5b5B2366C1B58Bea3858e81843583ee2e',
+  },
+  avalanche: {
+    'ETH/USD': '0x976B3D034E162d8bD72D6b9C989d545b839003b0',
+    'BTC/USD': '0x2779D32d5166BAaa2B2b658333bA7e6Ec0C65743',
+    'LINK/USD': '0x49ccd9ca821EfEab2b98c60dC60F518E765EDe9a',
+    'AVAX/USD': '0x0A77230d17318075983913bC2145DB16C7366156',
+    'USDC/USD': '0xF096872672F44d6EBA71458D74fe67F9a77a23B9',
+  },
+}
+
+// ── CCIP configuration ─────────────────────────────────────────────
+
+/**
+ * CCIP chain selectors and router addresses.
+ * Source: https://docs.chain.link/ccip/supported-networks
+ */
+const CCIP = {
+  routers: {
+    ethereum: '0x80226fc0Ee2b096224EeAc085Bb9a8cba1146f7D',
+    arbitrum: '0x141fa059441E0ca23ce184B6A78bafD2A517DdE8',
+    optimism: '0x3206695CaE29952f4b0c22a169725a865bc8Ce0f',
+    base: '0x881e3A65B4d4a04dD529061dd0071cf975F58bCD',
+    polygon: '0x849c5ED5a80F5B408Dd4969b78c2C8fdf0565Bfe',
+    avalanche: '0xF4c7E640EdA248ef95972845a62bdC74237805dB',
+    // Testnets
+    sepolia: '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59',
+    'base-sepolia': '0xD3b06cEbF099CE7DA4AcCf578aaebFDBd6e88a93',
+    'arbitrum-sepolia': '0x2a9C5afB0d0e4BAb2BCdaE109EC4b0c4Be15a165',
+    fuji: '0xF694E193200268f9a4868e4Aa017A0118C9a8177',
+    amoy: '0x9C32fCB86BF0f4a1A8921a9Fe46de3198bb884B2',
+  },
+  chainSelectors: {
+    ethereum: '5009297550715157269',
+    arbitrum: '4949039107694359620',
+    optimism: '3734403246176062136',
+    base: '15971525489660198786',
+    polygon: '4051577828743386545',
+    avalanche: '6433500567565415381',
+    // Testnets
+    sepolia: '16015286601757825753',
+    'base-sepolia': '10344971235874465080',
+    'arbitrum-sepolia': '3478487238524512106',
+    fuji: '14767482510784806043',
+    amoy: '16281711391670634445',
+  },
+}
+
+/**
+ * CCIP interface functions.
+ */
+const CCIP_INTERFACE = {
+  getFee:
+    'function getFee(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external view returns (uint256)',
+  ccipSend:
+    'function ccipSend(uint64 destinationChainSelector, (bytes receiver, bytes data, (address token, uint256 amount)[] tokenAmounts, address feeToken, bytes extraArgs) message) external payable returns (bytes32)',
+}
+
+// ── VRF v2.5 configuration ─────────────────────────────────────────
+
+const VRF = {
+  coordinators: {
+    ethereum: '0xD7f86b4b8Cae7D942340FF628F82735b7a20893a',
+    arbitrum: '0x3C0Ca683b403E37668AE3DC4FB62F4B29B6f7571',
+    base: '0xd5D517aBE5cF79B7e95eC98dB0f0277788aFF634',
+    polygon: '0xec0Ed46f36576541C681b72033893895e0faE0C9',
+    avalanche: '0xE40895D055bccd2053FD1F5744b0ad87781E523B',
+    // Testnets
+    sepolia: '0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B',
+    'base-sepolia': '0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE',
+    fuji: '0x5C210eF41CD1a72de73bF76eC39637bB0d3d7BEE',
+  },
+  keyHashes: {
+    // Each chain has multiple key hashes for different gas lanes.
+    // Using the "500 gwei" lane as default for mainnet, "100 gwei" for testnets.
+    ethereum: '0x8077df514608a09f83e4e8d300645594e5d7234665448ba83f51a50f842bd3d9',
+    sepolia: '0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae',
+  },
+}
+
+const VRF_INTERFACE = {
+  createSubscription: 'function createSubscription() external returns (uint256 subId)',
+  addConsumer: 'function addConsumer(uint256 subId, address consumer) external',
+  removeConsumer: 'function removeConsumer(uint256 subId, address consumer) external',
+  getSubscription:
+    'function getSubscription(uint256 subId) external view returns (uint96 balance, uint96 nativeBalance, uint64 reqCount, address subOwner, address[] memory consumers)',
+  requestRandomWords:
+    'function requestRandomWords(bytes32 keyHash, uint256 subId, uint16 requestConfirmations, uint32 callbackGasLimit, uint32 numWords, bytes extraArgs) external returns (uint256 requestId)',
+  fundSubscription: 'function fundSubscriptionWithNative(uint256 subId) external payable',
+}
+
+// ── Functions configuration ────────────────────────────────────────
+
+const FUNCTIONS = {
+  routers: {
+    ethereum: '0x65Dcc24F8ff9e51F10DCc7Ed1e4e2A61e6E14bd6',
+    arbitrum: '0x97083E831F8F0638855e2A515c90EdCF158DF238',
+    base: '0xf9B8fc078197181C841c296C876945aaa425B278',
+    polygon: '0xdc2AAF042Aeff2E68B3e8E33F19e4B9fA7C73F10',
+    avalanche: '0xA9d587a00A31A52Ed70D6026794a8FC5E2F5E6bf',
+    // Testnets
+    sepolia: '0xb83E47C2bC239B3bf370bc41e1459A34b41238D0',
+    'base-sepolia': '0xf9B8fc078197181C841c296C876945aaa425B278',
+    fuji: '0xA9d587a00A31A52Ed70D6026794a8FC5E2F5E6bf',
+  },
+  donIds: {
+    ethereum: 'fun-ethereum-mainnet-1',
+    sepolia: 'fun-ethereum-sepolia-1',
+    arbitrum: 'fun-arbitrum-mainnet-1',
+    'arbitrum-sepolia': 'fun-arbitrum-sepolia-1',
+    base: 'fun-base-mainnet-1',
+    'base-sepolia': 'fun-base-sepolia-1',
+    polygon: 'fun-polygon-mainnet-1',
+    amoy: 'fun-polygon-amoy-1',
+    avalanche: 'fun-avalanche-mainnet-1',
+    fuji: 'fun-avalanche-fuji-1',
+  },
+}
+
+;// CONCATENATED MODULE: ./src/chainlink.js
+/**
+ * Chainlink on-chain client.
+ *
+ * Unlike REST-based partners (BitGo, Stripe, etc.), Chainlink's products
+ * are mostly smart contracts you read from or call. This client uses the
+ * W3 syscall bridge to make on-chain calls rather than HTTP requests.
+ *
+ * The bridge runs on the host and handles signing via W3_SECRET_*
+ * keys — no private keys in the action container.
+ *
+ * ## Architecture
+ *
+ * Each Chainlink product has its own set of methods organized by prefix:
+ *   - Price Feeds:    getPrice, getFeedInfo, listFeeds
+ *   - Proof of Reserve: getReserves
+ *   - CCIP:           ccipSend, ccipEstimateFee, ccipGetMessage
+ *   - VRF:            vrfRequest, vrfGetSubscription, ...
+ *   - Functions:      functionsRequest, functionsGetSubscription, ...
+ *   - Data Streams:   streamsFetchReport, ... (REST, not bridge)
+ *
+ * All on-chain reads go through `bridge.chain('ethereum', 'read-contract', ...)`
+ * All on-chain writes go through `bridge.chain('ethereum', 'call-contract', ...)`
  */
 
 
 
-// TODO: Replace with your partner's API URL
-const DEFAULT_BASE_URL = 'https://api.yourpartner.com'
 
 /**
- * Partner-specific error class. Extends W3ActionError so action-core's
- * handleError reports the structured code and downstream consumers can
- * pattern-match on err.code.
- *
- * TODO: Rename to match your partner (e.g. Cube3Error, StripeError).
+ * Chainlink-specific error class.
  */
-class ClientError extends W3ActionError {
-  constructor(code, message, { statusCode, details } = {}) {
-    super(code, message, { statusCode, details })
-    this.name = 'ClientError'
+class ChainlinkError extends error_W3ActionError {
+  constructor(code, message, { details } = {}) {
+    super(code, message, { details })
+    this.name = 'ChainlinkError'
   }
 }
 
-// TODO: Rename this class (e.g. Cube3Client, StripeClient)
-class Client {
-  constructor({ apiKey, baseUrl = DEFAULT_BASE_URL } = {}) {
-    // TODO: Remove this check if your API doesn't need auth
-    if (!apiKey) {
-      throw new ClientError('MISSING_API_KEY', 'API key is required')
-    }
-    this.apiKey = apiKey
-    this.baseUrl = baseUrl.replace(/\/+$/, '')
+/**
+ * Resolve a chain name to its network identifier for the bridge.
+ * Accepts both common names ("ethereum", "sepolia") and chain IDs.
+ */
+function resolveNetwork(chain) {
+  if (!chain) {
+    throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
+  }
+  const network = NETWORKS[chain.toLowerCase()]
+  if (!network) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `Chain "${chain}" is not supported. Available: ${Object.keys(NETWORKS).join(', ')}`,
+    )
+  }
+  return network
+}
+
+// ── Price Feeds ────────────────────────────────────────────────────
+
+/**
+ * Get the latest price from a Chainlink Data Feed.
+ *
+ * @param {string} pair - e.g. "ETH/USD"
+ * @param {string} chain - e.g. "ethereum", "sepolia", "base"
+ * @returns {{ pair, chain, price, decimals, roundId, updatedAt, raw }}
+ */
+async function getPrice(pair, chain) {
+  if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required (e.g. "ETH/USD")')
+
+  const net = resolveNetwork(chain)
+  const feedAddress = lookupFeed(pair, chain)
+
+  // Read decimals first so we can format the answer
+  const decimalsResult = await bridge.chain('ethereum', 'read-contract', {
+    contractAddress: feedAddress,
+    functionSignature: FEED_INTERFACE.decimals,
+    args: '[]',
+    ...net.bridgeParams,
+  })
+  const feedDecimals = parseInt(decimalsResult, 10)
+
+  // Read latest round data
+  const roundData = await bridge.chain('ethereum', 'read-contract', {
+    contractAddress: feedAddress,
+    functionSignature: FEED_INTERFACE.latestRoundData,
+    args: '[]',
+    ...net.bridgeParams,
+  })
+
+  // roundData is typically returned as a tuple:
+  // [roundId, answer, startedAt, updatedAt, answeredInRound]
+  const parsed = parseRoundData(roundData, feedDecimals)
+
+  return {
+    pair,
+    chain,
+    price: parsed.price,
+    priceRaw: parsed.answerRaw,
+    decimals: feedDecimals,
+    roundId: parsed.roundId,
+    updatedAt: parsed.updatedAt,
+    feedAddress,
+    raw: roundData,
+  }
+}
+
+/**
+ * Get metadata about a specific feed.
+ */
+async function getFeedInfo(pair, chain) {
+  if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required')
+
+  const net = resolveNetwork(chain)
+  const feedAddress = lookupFeed(pair, chain)
+
+  const [description, decimalsResult] = await Promise.all([
+    bridge.chain('ethereum', 'read-contract', {
+      contractAddress: feedAddress,
+      functionSignature: FEED_INTERFACE.description,
+      args: '[]',
+      ...net.bridgeParams,
+    }),
+    bridge.chain('ethereum', 'read-contract', {
+      contractAddress: feedAddress,
+      functionSignature: FEED_INTERFACE.decimals,
+      args: '[]',
+      ...net.bridgeParams,
+    }),
+  ])
+
+  return {
+    pair,
+    chain,
+    feedAddress,
+    description: String(description),
+    decimals: parseInt(decimalsResult, 10),
+  }
+}
+
+/**
+ * List available price feeds for a chain.
+ */
+function listFeeds(chain) {
+  if (!chain) throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
+
+  const chainKey = chain.toLowerCase()
+  const feeds = FEEDS[chainKey]
+  if (!feeds) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No feeds registered for chain "${chain}". Available chains: ${Object.keys(FEEDS).join(', ')}`,
+    )
   }
 
-  /**
-   * TODO: Replace with your first command.
-   *
-   * Example:
-   *   async inspect(address) { ... }
-   *   async getLatestPrices(ids) { ... }
-   */
-  async exampleCommand(input) {
-    if (!input) {
-      throw new ClientError('MISSING_INPUT', 'Input is required')
-    }
+  return {
+    chain,
+    feeds: Object.entries(feeds).map(([pair, address]) => ({ pair, address })),
+    count: Object.keys(feeds).length,
+  }
+}
 
-    try {
-      return await request(`${this.baseUrl}/v1/example/${encodeURIComponent(input)}`, {
-        headers: {
-          // TODO: Adjust auth header to match your partner's API.
-          // Common patterns:
-          //   'X-Api-Key': this.apiKey
-          //   'Authorization': `Bearer ${this.apiKey}`
-          'X-Api-Key': this.apiKey,
-        },
-      })
-    } catch (err) {
-      // action-core throws W3ActionError on non-2xx with the response body
-      // jammed into the message. Translate into a typed ClientError so
-      // downstream consumers can pattern-match on err.code.
-      if (err && typeof err === 'object' && 'statusCode' in err) {
-        throw new ClientError('API_ERROR', err.message || `HTTP ${err.statusCode}`, {
-          statusCode: err.statusCode,
-        })
-      }
-      throw err
-    }
+// ── Internal helpers ───────────────────────────────────────────────
+
+/**
+ * Look up a feed address from the registry.
+ */
+function lookupFeed(pair, chain) {
+  const chainKey = chain.toLowerCase()
+  const pairKey = pair.toUpperCase().replace(/\s/g, '')
+
+  const chainFeeds = FEEDS[chainKey]
+  if (!chainFeeds) {
+    throw new ChainlinkError(
+      'UNSUPPORTED_CHAIN',
+      `No feeds registered for chain "${chain}". Available chains: ${Object.keys(FEEDS).join(', ')}`,
+    )
+  }
+
+  const address = chainFeeds[pairKey]
+  if (!address) {
+    throw new ChainlinkError(
+      'UNKNOWN_FEED',
+      `No feed found for "${pair}" on ${chain}. Available feeds: ${Object.keys(chainFeeds).join(', ')}`,
+    )
+  }
+
+  return address
+}
+
+/**
+ * Parse the return value of latestRoundData().
+ *
+ * The bridge returns contract read results in different shapes depending
+ * on the chain provider. This function normalizes the common cases:
+ *   - Array/tuple: [roundId, answer, startedAt, updatedAt, answeredInRound]
+ *   - Object with named fields
+ *   - Raw hex that needs decoding
+ */
+function parseRoundData(raw, decimals) {
+  let roundId, answer, updatedAt
+
+  if (Array.isArray(raw)) {
+    roundId = String(raw[0])
+    answer = String(raw[1])
+    updatedAt = String(raw[3])
+  } else if (raw && typeof raw === 'object') {
+    roundId = String(raw.roundId ?? raw[0] ?? '0')
+    answer = String(raw.answer ?? raw[1] ?? '0')
+    updatedAt = String(raw.updatedAt ?? raw[3] ?? '0')
+  } else {
+    // Fallback: treat as a single value (the answer)
+    roundId = '0'
+    answer = String(raw)
+    updatedAt = '0'
+  }
+
+  // Convert the raw integer answer to a decimal price string.
+  // Chainlink feeds return answer as an int256 scaled by 10^decimals.
+  const negative = answer.startsWith('-')
+  const absAnswer = negative ? answer.slice(1) : answer
+  const padded = absAnswer.padStart(decimals + 1, '0')
+  const whole = padded.slice(0, -decimals) || '0'
+  const frac = padded.slice(-decimals)
+  const price = `${negative ? '-' : ''}${whole}.${frac}`
+
+  return {
+    roundId,
+    answerRaw: answer,
+    price,
+    updatedAt,
   }
 }
 
 ;// CONCATENATED MODULE: ./src/main.js
 
 
-// TODO: Import your client and error class
 
 
 /**
- * W3 Action — command dispatch.
+ * W3 Chainlink Action — command dispatch.
  *
- * Each command handler is an async function that:
- *   1. Reads inputs via @actions/core
- *   2. Calls a method on your client
- *   3. Sets the JSON output via setJsonOutput
- *
- * createCommandRouter from @w3-io/action-core handles dispatch by command
- * name and reports unknown commands with the available list.
- *
- * To add a command:
- *   1. Write a handler in the `handlers` object below
- *   2. Add a matching method on your client
- *   3. Document it in action.yml, w3-action.yaml, and docs/guide.md
+ * Tier 1: Price Feeds + Proof of Reserve (bridge reads)
+ * Tier 2: CCIP (cross-chain orchestrated sends)
+ * Tier 3: VRF + Functions (subscription mgmt + async fulfillment)
+ * Tier 4: Data Streams (REST + on-chain verifier)
  */
 
-// TODO: Initialize your client
-function getClient() {
-  return new Client({
-    apiKey: lib_core.getInput('api-key', { required: true }),
-    baseUrl: lib_core.getInput('api-url') || undefined,
-  })
-}
-
 const handlers = {
-  // TODO: Replace with your commands
-  'example-command': async () => {
-    const client = getClient()
-    const input = lib_core.getInput('input', { required: true })
-    const result = await client.exampleCommand(input)
+  // ── Price Feeds ───────────────────────────────────────────────
+
+  'get-price': async () => {
+    const result = await getPrice(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+    )
+    setJsonOutput('result', result)
+  },
+
+  'get-feed-info': async () => {
+    const result = await getFeedInfo(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+    )
+    setJsonOutput('result', result)
+  },
+
+  'list-feeds': async () => {
+    const result = listFeeds(lib_core.getInput('chain', { required: true }))
     setJsonOutput('result', result)
   },
 }
 
 const router = createCommandRouter(handlers)
 
-/**
- * Top-level run wrapper. Catches structured client errors separately so
- * the partner-specific error code reaches `core.setFailed`, falling back
- * to action-core's generic handler for everything else.
- */
 async function run() {
   try {
     await router()
   } catch (error) {
-    if (error instanceof ClientError) {
-      lib_core.setFailed(`${error.code}: ${error.message}`)
+    if (error instanceof ChainlinkError) {
+      lib_core.setFailed(`Chainlink error (${error.code}): ${error.message}`)
     } else {
       handleError(error)
     }

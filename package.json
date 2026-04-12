@@ -1,8 +1,8 @@
 {
-  "name": "w3-yourpartner-action",
+  "name": "w3-chainlink-action",
   "version": "0.1.0",
   "private": true,
-  "description": "TODO: Your action description",
+  "description": "Chainlink on-chain primitives for W3 workflows — price feeds, CCIP cross-chain transfers, VRF randomness, Functions off-chain compute, proof of reserve, and data streams.",
   "type": "module",
   "scripts": {
     "build": "ncc build src/index.js -o dist",

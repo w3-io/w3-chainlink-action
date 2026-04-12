@@ -1,43 +1,97 @@
-# TODO: Replace this entire file with your action's definition.
-#
-# This file is the contract between your action and the workflow runner.
-# It defines what inputs your action accepts and what outputs it produces.
-# Keep inputs minimal and well-named. See the README for naming conventions.
-#
-# Reference: https://docs.github.com/en/actions/creating-actions/metadata-syntax-for-github-actions
-
-name: 'W3 YourPartner Action' # TODO: e.g. "W3 Cube3 Action"
-description: 'Short description' # TODO: what does your action do?
+name: 'W3 Chainlink Action'
+description: 'Chainlink on-chain primitives for W3 workflows — price feeds, CCIP cross-chain transfers, VRF randomness, Functions off-chain compute, proof of reserve, and data streams.'
 author: 'w3-io'
 
 inputs:
   command:
-    description: 'Operation to perform' # TODO: list your commands here
+    description: >
+      Operation to perform. Price Feeds: get-price, get-feed-info, list-feeds.
+      Proof of Reserve: por-get-reserves. CCIP: ccip-send, ccip-estimate-fee,
+      ccip-wait-for-delivery, ccip-get-message. VRF: vrf-request,
+      vrf-wait-for-fulfillment, vrf-create-subscription, vrf-fund-subscription,
+      vrf-add-consumer, vrf-get-subscription. Functions: functions-request,
+      functions-wait-for-fulfillment, functions-create-subscription,
+      functions-get-subscription. Data Streams: streams-fetch-report,
+      streams-list-feeds.
     required: true
-  api-key:
-    description: 'API key for authentication'
-    required: true # TODO: set to false if your API needs no auth
-  api-url:
-    description: 'API base URL override (for testing or staging)'
-    required: false
-    default: 'https://api.yourpartner.com' # TODO: your partner's production API URL
 
-  # TODO: Add your command-specific inputs below. Use plain names without
-  # partner prefix. For example:
-  #
-  # address:
-  #   description: 'Blockchain address to inspect'
-  #   required: false
-  #
-  # symbols:
-  #   description: 'Comma-separated token symbols (e.g. "BTC,ETH")'
-  #   required: false
+  # Common inputs
+  chain:
+    description: 'Target chain: ethereum, sepolia, base, arbitrum, polygon, avalanche, and their testnets.'
+    required: false
+  pair:
+    description: 'Price pair for feed commands (e.g. "ETH/USD", "BTC/USD").'
+    required: false
+  feed-address:
+    description: 'Direct feed contract address (bypasses the built-in registry). Use for feeds not in the curated list.'
+    required: false
+
+  # CCIP inputs
+  source-chain:
+    description: 'Source chain for CCIP sends.'
+    required: false
+  destination-chain:
+    description: 'Destination chain for CCIP sends.'
+    required: false
+  token:
+    description: 'Token symbol for CCIP transfers (e.g. "USDC", "LINK").'
+    required: false
+  amount:
+    description: 'Amount in base units for CCIP transfers.'
+    required: false
+  receiver:
+    description: 'Receiver address on the destination chain.'
+    required: false
+  message-id:
+    description: 'CCIP message ID for ccip-wait-for-delivery / ccip-get-message.'
+    required: false
+
+  # VRF inputs
+  subscription-id:
+    description: 'VRF or Functions subscription ID.'
+    required: false
+  consumer-contract:
+    description: 'Consumer contract address for VRF.'
+    required: false
+  num-words:
+    description: 'Number of random words to request from VRF (default 1).'
+    required: false
+    default: '1'
+
+  # Functions inputs
+  source-code:
+    description: 'JavaScript source code for Chainlink Functions requests.'
+    required: false
+  args:
+    description: 'JSON array of string arguments for Functions source code.'
+    required: false
+  secrets:
+    description: 'JSON object of secrets for Functions source code.'
+    required: false
+
+  # Data Streams inputs
+  feed-id:
+    description: 'Data Streams feed ID (hex).'
+    required: false
+  timestamp:
+    description: 'Timestamp for Data Streams report fetch (Unix seconds).'
+    required: false
+  api-key:
+    description: 'Chainlink Data Streams API key (required for streams-* commands only).'
+    required: false
+
+  # Async fulfillment
+  request-id:
+    description: 'Request ID for VRF or Functions wait-for-fulfillment.'
+    required: false
+  timeout:
+    description: 'Polling timeout in seconds for wait-for-* commands (default 300).'
+    required: false
+    default: '300'
 
 outputs:
   result:
-    description: 'JSON result of the operation'
-    # This is the only output. Always a JSON string.
-    # Document the schema in your w3-action.yaml and docs/guide.md.
+    description: 'JSON result of the operation. Schema documented per command in docs/guide.md.'
 
 runs:
   using: 'node24'
