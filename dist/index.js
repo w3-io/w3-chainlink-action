@@ -28447,10 +28447,10 @@ async function getPrice(pair, chain, { rpcUrl } = {}) {
 /**
  * Get metadata about a specific feed.
  */
-async function getFeedInfo(pair, chain) {
+async function getFeedInfo(pair, chain, { rpcUrl } = {}) {
   if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const feedAddress = lookupFeed(pair, chain)
 
   const [description, decimalsResult] = await Promise.all([
@@ -28459,13 +28459,13 @@ async function getFeedInfo(pair, chain) {
       method: FEED_INTERFACE.description,
       args: [],
       ...net.params,
-    }, net.network),
+    }, net.network).then(unwrapBridgeResult),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.decimals,
       args: [],
       ...net.params,
-    }, net.network),
+    }, net.network).then(unwrapBridgeResult),
   ])
 
   return {
@@ -28510,10 +28510,10 @@ function listFeeds(chain) {
  * @param {string} feed - e.g. "WBTC/BTC"
  * @param {string} chain - e.g. "ethereum"
  */
-async function getReserves(feed, chain) {
+async function getReserves(feed, chain, { rpcUrl } = {}) {
   if (!feed) throw new ChainlinkError('MISSING_FEED', 'feed is required (e.g. "WBTC/BTC")')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const feedAddress = lookupPorFeed(feed, chain)
 
   const [decimalsResult, roundData, description] = await Promise.all([
@@ -28522,19 +28522,19 @@ async function getReserves(feed, chain) {
       method: FEED_INTERFACE.decimals,
       args: [],
       ...net.params,
-    }, net.network),
+    }, net.network).then(unwrapBridgeResult),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.latestRoundData,
       args: [],
       ...net.params,
-    }, net.network),
+    }, net.network).then(unwrapBridgeResult),
     bridge.chain('ethereum', 'read-contract', {
       contract: feedAddress,
       method: FEED_INTERFACE.description,
       args: [],
       ...net.params,
-    }, net.network),
+    }, net.network).then(unwrapBridgeResult),
   ])
 
   const feedDecimals = parseInt(decimalsResult, 10)
