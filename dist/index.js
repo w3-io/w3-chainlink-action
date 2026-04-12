@@ -28355,6 +28355,46 @@ function resolveNetwork(chain, rpcUrl) {
   }
 }
 
+/**
+ * Extract a value from a bridge response. The bridge may return:
+ *   - A decoded value directly (string, number, array)
+ *   - An object { ok: true, raw: "0x...", result: [...] }
+ *   - An object { ok: false, error: "..." }
+ */
+function unwrapBridgeResult(result) {
+  if (result && typeof result === 'object' && 'ok' in result) {
+    if (!result.ok) {
+      throw new ChainlinkError(
+        result.code || 'BRIDGE_ERROR',
+        result.error || 'Bridge call failed',
+      )
+    }
+    // If the bridge decoded the result, use it
+    if (result.result !== undefined) return result.result
+    // Otherwise decode the raw ABI hex ourselves
+    if (result.raw) return decodeAbiHex(result.raw)
+    return result
+  }
+  return result
+}
+
+/**
+ * Decode ABI-encoded hex into an array of uint256 words.
+ * Each word is 32 bytes (64 hex chars). Values are returned as strings
+ * to avoid JavaScript number precision loss on uint256.
+ */
+function decodeAbiHex(hex) {
+  const data = hex.startsWith('0x') ? hex.slice(2) : hex
+  const words = []
+  for (let i = 0; i < data.length; i += 64) {
+    const word = data.slice(i, i + 64)
+    if (word.length === 64) {
+      words.push(BigInt('0x' + word).toString())
+    }
+  }
+  return words.length === 1 ? words[0] : words
+}
+
 // ── Price Feeds ────────────────────────────────────────────────────
 
 /**
@@ -28371,21 +28411,21 @@ async function getPrice(pair, chain, { rpcUrl } = {}) {
   const feedAddress = lookupFeed(pair, chain)
 
   // Read decimals first so we can format the answer
-  const decimalsResult = await bridge.chain('ethereum', 'read-contract', {
+  const decimalsResult = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: feedAddress,
     method: FEED_INTERFACE.decimals,
     args: [],
     ...net.params,
-  }, net.network)
+  }, net.network))
   const feedDecimals = parseInt(decimalsResult, 10)
 
   // Read latest round data
-  const roundData = await bridge.chain('ethereum', 'read-contract', {
+  const roundData = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: feedAddress,
     method: FEED_INTERFACE.latestRoundData,
     args: [],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   // roundData is typically returned as a tuple:
   // [roundId, answer, startedAt, updatedAt, answeredInRound]
@@ -28544,12 +28584,12 @@ async function ccipEstimateFee(
   // Build the EVM2AnyMessage struct
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken)
 
-  const fee = await bridge.chain('ethereum', 'read-contract', {
+    const fee = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method: CCIP_INTERFACE.getFee,
     args: [destSelector, message],
-    ...srcNet.bridgeParams,
-  })
+    ...srcNet.params,
+  }, srcNet.network))
 
   return {
     sourceChain,
@@ -28584,12 +28624,12 @@ async function ccipSend(
 
   const message = buildCcipMessage(receiver, data, tokenAmounts, resolvedFeeToken, gasLimit)
 
-  const messageId = await bridge.chain('ethereum', 'call-contract', {
+  const messageId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: router,
     method: CCIP_INTERFACE.ccipSend,
     args: [destSelector, message],
-    ...srcNet.bridgeParams,
-  })
+    ...srcNet.params,
+  }, srcNet.network))
 
   return {
     status: 'sent',
@@ -28610,12 +28650,12 @@ async function vrfCreateSubscription(chain) {
   const net = resolveNetwork(chain)
   const coordinator = lookupVrfCoordinator(chain)
 
-  const subId = await bridge.chain('ethereum', 'call-contract', {
+  const subId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.createSubscription,
     args: [],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   return { subscriptionId: String(subId), coordinator, chain }
 }
@@ -28630,12 +28670,12 @@ async function vrfGetSubscription(subscriptionId, chain) {
   const net = resolveNetwork(chain)
   const coordinator = lookupVrfCoordinator(chain)
 
-  const sub = await bridge.chain('ethereum', 'read-contract', {
+  const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.getSubscription,
     args: [subscriptionId],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   // Normalize the return value
   const balance = Array.isArray(sub) ? sub[0] : sub?.balance
@@ -28667,12 +28707,12 @@ async function vrfAddConsumer(subscriptionId, consumer, chain) {
   const net = resolveNetwork(chain)
   const coordinator = lookupVrfCoordinator(chain)
 
-  await bridge.chain('ethereum', 'call-contract', {
+  unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.addConsumer,
     args: [subscriptionId, consumer],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   return { subscriptionId, consumer, coordinator, chain }
 }
@@ -28691,7 +28731,7 @@ async function vrfRequest(
   const coordinator = lookupVrfCoordinator(chain)
   const keyHash = lookupVrfKeyHash(chain)
 
-  const requestId = await bridge.chain('ethereum', 'call-contract', {
+  const requestId = unwrapBridgeResult(await bridge.chain('ethereum', 'call-contract', {
     contract: coordinator,
     method: VRF_INTERFACE.requestRandomWords,
     args: [
@@ -28703,7 +28743,7 @@ async function vrfRequest(
       '0x', // extraArgs (empty = pay in LINK)
     ],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   return {
     requestId: String(requestId),
@@ -28727,13 +28767,13 @@ async function functionsGetSubscription(subscriptionId, chain) {
   const router = lookupFunctionsRouter(chain)
 
   // Functions uses a different getSubscription signature than VRF
-  const sub = await bridge.chain('ethereum', 'read-contract', {
+  const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
     method:
       'function getSubscription(uint64 subscriptionId) external view returns (uint96 balance, address owner, uint64 blockedBalance, address[] memory consumers)',
     args: [subscriptionId],
     ...net.params,
-  }, net.network)
+  }, net.network))
 
   const balance = Array.isArray(sub) ? sub[0] : sub?.balance
   const owner = Array.isArray(sub) ? sub[1] : sub?.owner
