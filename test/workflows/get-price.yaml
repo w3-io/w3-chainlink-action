@@ -12,6 +12,7 @@ jobs:
           command: get-price
           pair: ETH/USD
           chain: sepolia
+          rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
 
       - run: |
           echo "Price result:"

@@ -31,6 +31,7 @@ const handlers = {
     const result = await getPrice(
       core.getInput('pair', { required: true }),
       core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },

@@ -28328,10 +28328,11 @@ class ChainlinkError extends error_W3ActionError {
 }
 
 /**
- * Resolve a chain name to its network identifier for the bridge.
- * Accepts both common names ("ethereum", "sepolia") and chain IDs.
+ * Resolve a chain name to its network identifier + bridge params.
+ * If rpcUrl is provided, it's included in the bridge params so the
+ * bridge uses it instead of its built-in default.
  */
-function resolveNetwork(chain) {
+function resolveNetwork(chain, rpcUrl) {
   if (!chain) {
     throw new ChainlinkError('MISSING_CHAIN', 'chain is required')
   }
@@ -28341,6 +28342,13 @@ function resolveNetwork(chain) {
       'UNSUPPORTED_CHAIN',
       `Chain "${chain}" is not supported. Available: ${Object.keys(NETWORKS).join(', ')}`,
     )
+  }
+  // If rpcUrl is provided, merge it into the bridge params
+  if (rpcUrl) {
+    return {
+      ...network,
+      bridgeParams: { ...network.bridgeParams, rpcUrl },
+    }
   }
   return network
 }
@@ -28354,10 +28362,10 @@ function resolveNetwork(chain) {
  * @param {string} chain - e.g. "ethereum", "sepolia", "base"
  * @returns {{ pair, chain, price, decimals, roundId, updatedAt, raw }}
  */
-async function getPrice(pair, chain) {
+async function getPrice(pair, chain, { rpcUrl } = {}) {
   if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required (e.g. "ETH/USD")')
 
-  const net = resolveNetwork(chain)
+  const net = resolveNetwork(chain, rpcUrl)
   const feedAddress = lookupFeed(pair, chain)
 
   // Read decimals first so we can format the answer
@@ -28962,6 +28970,7 @@ const handlers = {
     const result = await getPrice(
       lib_core.getInput('pair', { required: true }),
       lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
     )
     setJsonOutput('result', result)
   },
