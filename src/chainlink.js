@@ -503,18 +503,41 @@ export async function functionsGetSubscription(subscriptionId, chain, { rpcUrl }
   const net = resolveNetwork(chain, rpcUrl)
   const router = lookupFunctionsRouter(chain)
 
-  // Functions uses a different getSubscription signature than VRF
+  // Functions Router v1.2 returns a Subscription struct.
+  // Use the full ABI to handle tuple return type properly.
   const sub = unwrapBridgeResult(await bridge.chain('ethereum', 'read-contract', {
     contract: router,
-    method:
-      'function getSubscription(uint64) returns (uint96, address, uint64, address[])',
+    method: 'getSubscription',
+    abi: JSON.stringify([{
+      name: 'getSubscription',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [{ name: 'subscriptionId', type: 'uint64' }],
+      outputs: [{
+        name: 'subscription',
+        type: 'tuple',
+        components: [
+          { name: 'balance', type: 'uint96' },
+          { name: 'owner', type: 'address' },
+          { name: 'blockedBalance', type: 'uint96' },
+          { name: 'proposedOwner', type: 'address' },
+          { name: 'consumers', type: 'address[]' },
+          { name: 'flags', type: 'bytes32' },
+        ],
+      }],
+    }]),
     args: [subscriptionId],
     ...net.params,
   }, net.network))
 
-  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
-  const owner = Array.isArray(sub) ? sub[1] : sub?.owner
-  const consumers = Array.isArray(sub) ? sub[3] : sub?.consumers
+  // Bridge returns the tuple as a JSON array
+  let data = sub
+  if (typeof data === 'string') {
+    try { data = JSON.parse(data) } catch { /* use as-is */ }
+  }
+  const balance = Array.isArray(data) ? data[0] : data?.balance
+  const owner = Array.isArray(data) ? data[1] : data?.owner
+  const consumers = Array.isArray(data) ? data[4] : data?.consumers
 
   return {
     subscriptionId,
