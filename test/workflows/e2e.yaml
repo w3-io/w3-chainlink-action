@@ -1,0 +1,212 @@
+# E2E Test Workflow
+#
+# Exercises every command against real APIs/contracts.
+# Run on a local W3 network with:
+#   w3 workflow deploy test/workflows/e2e.yaml
+#   w3 workflow "Chainlink E2E" trigger
+#
+# Prerequisites:
+#   - W3 local network running (make dev)
+#   - W3_SECRET_ETHEREUM (bridge signer for write commands)
+#   - VRF/Functions commands need funded subscriptions (see comments)
+
+name: Chainlink E2E
+on:
+  workflow_dispatch: {}
+
+jobs:
+  # ── Price Feeds (read-only) ─────────────────────────────────────
+  price-feeds:
+    runs-on: ubuntu-latest
+    steps:
+      # get-price: ETH/USD
+      - uses: w3-io/w3-chainlink-action@main
+        id: eth-price
+        with:
+          command: get-price
+          pair: ETH/USD
+          chain: base
+
+      # get-price: BTC/USD
+      - uses: w3-io/w3-chainlink-action@main
+        id: btc-price
+        with:
+          command: get-price
+          pair: BTC/USD
+          chain: base
+
+      # get-price: LINK/USD
+      - uses: w3-io/w3-chainlink-action@main
+        id: link-price
+        with:
+          command: get-price
+          pair: LINK/USD
+          chain: base
+
+      # get-feed-info: ETH/USD
+      - uses: w3-io/w3-chainlink-action@main
+        id: feed-info
+        with:
+          command: get-feed-info
+          pair: ETH/USD
+          chain: base
+
+      # list-feeds
+      - uses: w3-io/w3-chainlink-action@main
+        id: list-feeds
+        with:
+          command: list-feeds
+          chain: base
+
+      - run: |
+          echo "=== ETH/USD ==="
+          echo "${{ steps.eth-price.outputs.result }}"
+          echo "=== BTC/USD ==="
+          echo "${{ steps.btc-price.outputs.result }}"
+          echo "=== LINK/USD ==="
+          echo "${{ steps.link-price.outputs.result }}"
+          echo "=== Feed Info ==="
+          echo "${{ steps.feed-info.outputs.result }}"
+          echo "=== List Feeds ==="
+          echo "${{ steps.list-feeds.outputs.result }}"
+
+  # ── Proof of Reserve (read-only) ────────────────────────────────
+  proof-of-reserve:
+    runs-on: ubuntu-latest
+    steps:
+      # por-get-reserves: use a known PoR feed on Ethereum mainnet
+      - uses: w3-io/w3-chainlink-action@main
+        id: por
+        with:
+          command: por-get-reserves
+          # WBTC Proof of Reserve feed on Ethereum
+          feed-address: '0xa81FE04086865e63E12dD3776978E49DEEa2ea4e'
+          chain: ethereum
+
+      - run: |
+          echo "=== Proof of Reserve ==="
+          echo "${{ steps.por.outputs.result }}"
+
+  # ── CCIP (read + write) ─────────────────────────────────────────
+  ccip:
+    runs-on: ubuntu-latest
+    steps:
+      # ccip-estimate-fee (read-only)
+      - uses: w3-io/w3-chainlink-action@main
+        id: ccip-fee
+        with:
+          command: ccip-estimate-fee
+          source-chain: base
+          destination-chain: ethereum
+          receiver: '0xe4E402962943c4EB2253f666575eE12700e78e90'
+          fee-token: native
+
+      # ccip-send (requires funded wallet with LINK or native token)
+      # NOTE: Uncomment when wallet is funded for cross-chain transfers
+      # - uses: w3-io/w3-chainlink-action@main
+      #   id: ccip-send
+      #   env:
+      #     W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+      #   bridge-allow:
+      #     - ethereum/call-contract
+      #   with:
+      #     command: ccip-send
+      #     source-chain: base
+      #     destination-chain: ethereum
+      #     receiver: '0xe4E402962943c4EB2253f666575eE12700e78e90'
+      #     fee-token: native
+
+      - run: |
+          echo "=== CCIP Fee Estimate ==="
+          echo "${{ steps.ccip-fee.outputs.result }}"
+
+  # ── VRF (requires funded subscription) ──────────────────────────
+  # NOTE: VRF commands require a funded subscription and consumer contract.
+  # To test: create subscription, fund with LINK, deploy consumer, add consumer.
+  # vrf:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     # vrf-create-subscription
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: vrf-create
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow:
+  #         - ethereum/call-contract
+  #       with:
+  #         command: vrf-create-subscription
+  #         chain: base
+  #
+  #     # vrf-get-subscription
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: vrf-get
+  #       with:
+  #         command: vrf-get-subscription
+  #         chain: base
+  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
+  #
+  #     # vrf-fund-subscription (requires LINK tokens)
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: vrf-fund
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow:
+  #         - ethereum/call-contract
+  #       with:
+  #         command: vrf-fund-subscription
+  #         chain: base
+  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
+  #         amount: '1000000000000000000'
+  #
+  #     # vrf-add-consumer (requires deployed consumer contract)
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: vrf-add-consumer
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow:
+  #         - ethereum/call-contract
+  #       with:
+  #         command: vrf-add-consumer
+  #         chain: base
+  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
+  #         consumer-contract: '<deployed-consumer-address>'
+  #
+  #     # vrf-request (requires consumer + funded subscription)
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: vrf-request
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow:
+  #         - ethereum/call-contract
+  #       with:
+  #         command: vrf-request
+  #         chain: base
+  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
+  #         consumer-contract: '<deployed-consumer-address>'
+  #         num-words: '1'
+  #         callback-gas-limit: '100000'
+  #         request-confirmations: '3'
+
+  # ── Functions (requires funded subscription) ────────────────────
+  # NOTE: Functions commands require a funded subscription.
+  # functions:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     # functions-create-subscription
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: func-create
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow:
+  #         - ethereum/call-contract
+  #       with:
+  #         command: functions-create-subscription
+  #         chain: base
+  #
+  #     # functions-get-subscription
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: func-get
+  #       with:
+  #         command: functions-get-subscription
+  #         chain: base
+  #         subscription-id: ${{ fromJSON(steps.func-create.outputs.result).subscriptionId }}
