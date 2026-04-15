@@ -36,12 +36,12 @@ jobs:
           chain: base
 
       # get-price: LINK/USD
-      - uses: w3-io/w3-chainlink-action@main
-        id: link-price
-        with:
-          command: get-price
-          pair: LINK/USD
-          chain: base
+      #       - uses: w3-io/w3-chainlink-action@main
+      #         id: link-price
+      #         with:
+      #           command: get-price
+      #           pair: LINK/USD
+      #           chain: base
 
       # get-feed-info: ETH/USD
       - uses: w3-io/w3-chainlink-action@main
@@ -63,8 +63,8 @@ jobs:
           echo "${{ steps.eth-price.outputs.result }}"
           echo "=== BTC/USD ==="
           echo "${{ steps.btc-price.outputs.result }}"
-          echo "=== LINK/USD ==="
-          echo "${{ steps.link-price.outputs.result }}"
+      #           echo "=== LINK/USD ==="
+      #           echo "${{ steps.link-price.outputs.result }}"
           echo "=== Feed Info ==="
           echo "${{ steps.feed-info.outputs.result }}"
           echo "=== List Feeds ==="
