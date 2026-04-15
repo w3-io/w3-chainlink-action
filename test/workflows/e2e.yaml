@@ -63,8 +63,6 @@ jobs:
           echo "${{ steps.eth-price.outputs.result }}"
           echo "=== BTC/USD ==="
           echo "${{ steps.btc-price.outputs.result }}"
-      #           echo "=== LINK/USD ==="
-      #           echo "${{ steps.link-price.outputs.result }}"
           echo "=== Feed Info ==="
           echo "${{ steps.feed-info.outputs.result }}"
           echo "=== List Feeds ==="
