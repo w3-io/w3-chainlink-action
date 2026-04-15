@@ -1,6 +1,6 @@
 # E2E Test Results
 
-> Last verified: 2026-04-15 -- NOT YET VERIFIED (YAML error in e2e.yaml)
+> Last verified: 2026-04-15 -- YAML fixed, not yet run
 
 ## Prerequisites
 
