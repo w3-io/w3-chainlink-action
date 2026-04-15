@@ -1,44 +1,338 @@
-# TODO: This file describes your action for the W3 MCP server.
-# AI agents use this to discover your action, understand its commands,
-# and generate correct workflow YAML. Keep it in sync with action.yml.
-#
-# On release, this file is synced to the MCP's registry.yaml.
-
-kind: integration # integration | primitive | utility
-partner: yourpartner # TODO: machine-readable partner ID
-name: YourPartner Integration # TODO: human-readable name
-version: 1.0.0
-repo: w3-io/w3-yourpartner-action # TODO: your repo
+kind: integration
+partner: chainlink
+name: Chainlink Integration
+version: 0.1.0
+repo: w3-io/w3-chainlink-action
 
 commands:
-  # TODO: Define each command your action supports. Example:
-  #
-  # - name: inspect
-  #   description: >
-  #     Risk assessment for a blockchain address. Returns per-chain
-  #     scores for fraud, compliance, and cyber risk.
-  #   inputs:
-  #     address:
-  #       type: string
-  #       required: true
-  #       description: Blockchain address to inspect
-  #     chain-id:
-  #       type: string
-  #       required: false
-  #       description: Filter to a specific chain
-  #   outputs:
-  #     result:
-  #       type: object
-  #       description: Full risk score breakdown
+  # ── Price Feeds ──────────────────────────────────────────────────
 
-  - name: example-command
-    description: TODO - describe what this command does
+  - name: get-price
+    description: >
+      Get the latest price from a Chainlink Data Feed. Returns the
+      human-readable price, raw integer answer, decimals, round ID,
+      and last-updated timestamp.
     inputs:
-      input:
+      pair:
         type: string
         required: true
-        description: TODO - describe this input
+        description: Price pair (e.g. "ETH/USD", "BTC/USD")
+      chain:
+        type: string
+        required: true
+        description: Target chain (ethereum, base, arbitrum, polygon, avalanche, sepolia)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
     outputs:
       result:
         type: object
-        description: TODO - describe the output shape
+        description: Price data with pair, chain, price, priceRaw, decimals, roundId, updatedAt, feedAddress
+
+  - name: get-feed-info
+    description: >
+      Get metadata about a specific Chainlink price feed, including
+      its on-chain description, decimal precision, and contract address.
+    inputs:
+      pair:
+        type: string
+        required: true
+        description: Price pair (e.g. "ETH/USD")
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Feed metadata with pair, chain, feedAddress, description, decimals
+
+  - name: list-feeds
+    description: >
+      List all registered price feeds for a chain from the built-in
+      registry. Returns pairs and their contract addresses.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain
+    outputs:
+      result:
+        type: object
+        description: Feed list with chain, feeds array [{pair, address}], count
+
+  # ── Proof of Reserve ─────────────────────────────────────────────
+
+  - name: por-get-reserves
+    description: >
+      Get the latest reserve data from a Chainlink Proof of Reserve
+      feed. Same AggregatorV3Interface as price feeds but the answer
+      represents total reserves in base units.
+    inputs:
+      pair:
+        type: string
+        required: true
+        description: PoR feed identifier (e.g. "WBTC/BTC")
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Reserve data with feed, chain, reserves, reservesRaw, decimals, description, roundId, updatedAt
+
+  # ── CCIP ─────────────────────────────────────────────────────────
+
+  - name: ccip-estimate-fee
+    description: >
+      Estimate the fee for a CCIP cross-chain transfer. Returns the
+      fee amount, fee token, router address, and destination selector.
+    inputs:
+      source-chain:
+        type: string
+        required: true
+        description: Source chain (e.g. "ethereum")
+      destination-chain:
+        type: string
+        required: true
+        description: Destination chain (e.g. "arbitrum")
+      receiver:
+        type: string
+        required: true
+        description: Receiver address on the destination chain
+      token-amounts:
+        type: string
+        required: false
+        description: JSON array of [{token, amount}] for token transfers
+      fee-token:
+        type: string
+        required: false
+        description: '"native" (default), "link", or a raw token address'
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Fee estimate with sourceChain, destinationChain, fee, feeToken, router, destinationSelector
+
+  - name: ccip-send
+    description: >
+      Send a CCIP cross-chain message, optionally with tokens.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      source-chain:
+        type: string
+        required: true
+        description: Source chain (e.g. "ethereum")
+      destination-chain:
+        type: string
+        required: true
+        description: Destination chain (e.g. "arbitrum")
+      receiver:
+        type: string
+        required: true
+        description: Receiver address on the destination chain
+      token-amounts:
+        type: string
+        required: false
+        description: JSON array of [{token, amount}] for token transfers
+      fee-token:
+        type: string
+        required: false
+        description: '"native" (default), "link", or a raw token address'
+      gas-limit:
+        type: string
+        required: false
+        description: Destination gas limit (default "200000")
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Send result with status, txHash, fee, sourceChain, destinationChain, router
+
+  # ── VRF ──────────────────────────────────────────────────────────
+
+  - name: vrf-create-subscription
+    description: >
+      Create a new VRF v2.5 subscription on the coordinator contract.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain (must have a registered VRF coordinator)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Created subscription with subscriptionId, txHash, coordinator, chain
+
+  - name: vrf-fund-subscription
+    description: >
+      Fund a VRF subscription with native ETH via
+      fundSubscriptionWithNative. No LINK approval needed.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: VRF subscription ID to fund
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      amount:
+        type: string
+        required: true
+        description: Amount in wei (e.g. "10000000000000000" for 0.01 ETH)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Funding result with subscriptionId, amount, txHash, coordinator, chain
+
+  - name: vrf-add-consumer
+    description: >
+      Whitelist a consumer contract on a VRF subscription.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: VRF subscription ID
+      consumer-contract:
+        type: string
+        required: true
+        description: Consumer contract address to whitelist
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Result with subscriptionId, consumer, txHash, coordinator, chain
+
+  - name: vrf-get-subscription
+    description: >
+      Get VRF subscription details including balance, consumer list,
+      and request count.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: VRF subscription ID
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Subscription details with subscriptionId, balance, nativeBalance, requestCount, owner, consumers
+
+  - name: vrf-request
+    description: >
+      Request random words from VRF v2.5. Returns a transaction hash
+      for tracking the request. Fulfillment is asynchronous.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain (must have a registered key hash)
+      subscription-id:
+        type: string
+        required: true
+        description: Funded VRF subscription ID
+      num-words:
+        type: string
+        required: false
+        description: Number of random words (default 1, max 500)
+      callback-gas-limit:
+        type: string
+        required: false
+        description: Gas limit for the fulfillment callback (default 100000)
+      request-confirmations:
+        type: string
+        required: false
+        description: Block confirmations before fulfillment (default 3, min 3)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Request result with txHash, subscriptionId, numWords, coordinator, chain
+
+  # ── Functions ────────────────────────────────────────────────────
+
+  - name: functions-create-subscription
+    description: >
+      Create a new Chainlink Functions subscription. The caller
+      becomes the subscription owner. Write operation requiring a
+      signer key via W3_SECRET_*.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain (must have a registered Functions router)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Created subscription with subscriptionId, txHash, router, chain
+
+  - name: functions-get-subscription
+    description: >
+      Get Chainlink Functions subscription details including balance,
+      owner, and consumer list.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: Functions subscription ID
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Subscription details with subscriptionId, chain, router, balance, owner, consumers
