@@ -44,7 +44,7 @@ jobs:
           command: ccip-estimate-fee
           source-chain: sepolia
           destination-chain: fuji
-          receiver: "0x5bC6a8220Fd1645970B467092896B5f98bc339dC"
+          receiver: '0x5bC6a8220Fd1645970B467092896B5f98bc339dC'
           rpc-url: https://eth-sepolia.g.alchemy.com/v2/0L3k1EjL5mpti6pqRUi1y
 
       # ── Summary ──────────────────────────────────────────────

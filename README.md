@@ -25,13 +25,13 @@ The workflow author says `pair: ETH/USD chain: ethereum` and the action looks up
 
 ## Commands
 
-| Group                | Commands                                                                             |
-| -------------------- | ------------------------------------------------------------------------------------ |
-| **Price Feeds**      | `get-price`, `get-feed-info`, `list-feeds`                                           |
-| **Proof of Reserve** | `por-get-reserves`                                                                   |
-| **CCIP**             | `ccip-estimate-fee`, `ccip-send`                                                     |
+| Group                | Commands                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Price Feeds**      | `get-price`, `get-feed-info`, `list-feeds`                                                                    |
+| **Proof of Reserve** | `por-get-reserves`                                                                                            |
+| **CCIP**             | `ccip-estimate-fee`, `ccip-send`                                                                              |
 | **VRF**              | `vrf-create-subscription`, `vrf-fund-subscription`, `vrf-add-consumer`, `vrf-get-subscription`, `vrf-request` |
-| **Functions**        | `functions-create-subscription`, `functions-get-subscription`                        |
+| **Functions**        | `functions-create-subscription`, `functions-get-subscription`                                                 |
 
 ## Inputs
 

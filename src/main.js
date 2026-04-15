@@ -99,10 +99,9 @@ const handlers = {
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
-    const result = await vrfCreateSubscription(
-      core.getInput('chain', { required: true }),
-      { rpcUrl: core.getInput('rpc-url') || undefined },
-    )
+    const result = await vrfCreateSubscription(core.getInput('chain', { required: true }), {
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
     setJsonOutput('result', result)
   },
 
@@ -151,10 +150,9 @@ const handlers = {
   // ── Functions ─────────────────────────────────────────────────
 
   'functions-create-subscription': async () => {
-    const result = await functionsCreateSubscription(
-      core.getInput('chain', { required: true }),
-      { rpcUrl: core.getInput('rpc-url') || undefined },
-    )
+    const result = await functionsCreateSubscription(core.getInput('chain', { required: true }), {
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
     setJsonOutput('result', result)
   },
 

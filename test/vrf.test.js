@@ -43,12 +43,14 @@ describe('vrfCreateSubscription', () => {
     // Mock a receipt with SubscriptionCreated event log
     const subCreatedTopic = '0x464722b4166576d3dcbba877b999bc35cf911f4eaf434b7eba68fa113951d0d7'
     const subIdTopic = '0x000000000000000000000000000000000000000000000000000000000000002a' // 42
-    mockBridge([{
-      value: {
-        tx_hash: '0xabc123',
-        logs_json: JSON.stringify([{ topics: [subCreatedTopic, subIdTopic] }]),
+    mockBridge([
+      {
+        value: {
+          tx_hash: '0xabc123',
+          logs_json: JSON.stringify([{ topics: [subCreatedTopic, subIdTopic] }]),
+        },
       },
-    }])
+    ])
 
     const result = await vrfCreateSubscription('sepolia')
 

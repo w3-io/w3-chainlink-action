@@ -164,11 +164,11 @@ Get subscription details — balance, consumers, request count.
 
 Fund a VRF subscription with native ETH. Uses `fundSubscriptionWithNative` — no LINK approval needed. **Write operation.**
 
-| Input             | Required | Description                    |
-| ----------------- | -------- | ------------------------------ |
-| `subscription-id` | yes      | Subscription ID                |
+| Input             | Required | Description                                         |
+| ----------------- | -------- | --------------------------------------------------- |
+| `subscription-id` | yes      | Subscription ID                                     |
 | `amount`          | yes      | Amount in wei (e.g. `10000000000000000` = 0.01 ETH) |
-| `chain`           | yes      | Target chain                   |
+| `chain`           | yes      | Target chain                                        |
 
 **Output:** `{ subscriptionId, amount, txHash, coordinator, chain }`.
 

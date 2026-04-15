@@ -21,12 +21,10 @@
 // Signatures stripped of `external view` modifiers — alloy's parser
 // expects just `function name(params) returns (types)`.
 export const FEED_INTERFACE = {
-  latestRoundData:
-    'function latestRoundData() returns (uint80, int256, uint256, uint256, uint80)',
+  latestRoundData: 'function latestRoundData() returns (uint80, int256, uint256, uint256, uint80)',
   decimals: 'function decimals() returns (uint8)',
   description: 'function description() returns (string)',
-  getRoundData:
-    'function getRoundData(uint80) returns (uint80, int256, uint256, uint256, uint80)',
+  getRoundData: 'function getRoundData(uint80) returns (uint80, int256, uint256, uint256, uint80)',
 }
 
 // ── Network configuration ──────────────────────────────────────────
