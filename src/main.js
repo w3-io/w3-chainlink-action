@@ -3,6 +3,7 @@ import { createCommandRouter, setJsonOutput, handleError } from '@w3-io/action-c
 import {
   getPrice,
   getFeedInfo,
+  getRoundData,
   listFeeds,
   getReserves,
   ccipEstimateFee,
@@ -38,7 +39,10 @@ const handlers = {
     const result = await getPrice(
       core.getInput('pair', { required: true }),
       core.getInput('chain', { required: true }),
-      { rpcUrl: core.getInput('rpc-url') || undefined },
+      {
+        feedAddress: core.getInput('feed-address') || undefined,
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
     )
     setJsonOutput('result', result)
   },
@@ -47,7 +51,23 @@ const handlers = {
     const result = await getFeedInfo(
       core.getInput('pair', { required: true }),
       core.getInput('chain', { required: true }),
-      { rpcUrl: core.getInput('rpc-url') || undefined },
+      {
+        feedAddress: core.getInput('feed-address') || undefined,
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'get-round-data': async () => {
+    const result = await getRoundData(
+      core.getInput('pair', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        roundId: core.getInput('round-id', { required: true }),
+        feedAddress: core.getInput('feed-address') || undefined,
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
     )
     setJsonOutput('result', result)
   },

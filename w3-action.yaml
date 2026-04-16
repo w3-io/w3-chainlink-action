@@ -21,6 +21,10 @@ commands:
         type: string
         required: true
         description: Target chain (ethereum, base, arbitrum, polygon, avalanche, sepolia)
+      feed-address:
+        type: string
+        required: false
+        description: Direct feed contract address (bypasses the built-in registry)
       rpc-url:
         type: string
         required: false
@@ -43,6 +47,10 @@ commands:
         type: string
         required: true
         description: Target chain
+      feed-address:
+        type: string
+        required: false
+        description: Direct feed contract address (bypasses the built-in registry)
       rpc-url:
         type: string
         required: false
@@ -51,6 +59,36 @@ commands:
       result:
         type: object
         description: Feed metadata with pair, chain, feedAddress, description, decimals
+
+  - name: get-round-data
+    description: >
+      Get historical price data by round ID from a Chainlink Data Feed.
+      Useful for auditing past prices or verifying historical oracle state.
+    inputs:
+      pair:
+        type: string
+        required: true
+        description: Price pair (e.g. "ETH/USD")
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      round-id:
+        type: string
+        required: true
+        description: Round ID to query
+      feed-address:
+        type: string
+        required: false
+        description: Direct feed contract address (bypasses the built-in registry)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Historical price data with pair, chain, price, priceRaw, decimals, roundId, updatedAt, feedAddress
 
   - name: list-feeds
     description: >
