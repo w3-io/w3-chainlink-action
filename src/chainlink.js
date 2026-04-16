@@ -801,7 +801,20 @@ function extractTxHash(receipt) {
       return rx
     }
   }
-  return rx?.txHash || rx?.tx_hash || rx?.transactionId || String(receipt)
+  // Different bridge versions have returned the hash under different
+  // keys. Check the known aliases before falling back to stringifying
+  // the whole response (which produces "[object Object]" and is
+  // always wrong).
+  return (
+    rx?.txHash ||
+    rx?.transactionHash ||
+    rx?.tx_hash ||
+    rx?.transactionId ||
+    rx?.signature ||
+    rx?.result?.txHash ||
+    rx?.result?.transactionHash ||
+    null
+  )
 }
 
 /**
