@@ -16,6 +16,7 @@ import {
   vrfRequest,
   functionsCreateSubscription,
   functionsGetSubscription,
+  functionsRequest,
   streamsListFeeds,
   streamsFetchReport,
   ChainlinkError,
@@ -188,6 +189,17 @@ const handlers = {
       core.getInput('chain', { required: true }),
       { rpcUrl: core.getInput('rpc-url') || undefined },
     )
+    setJsonOutput('result', result)
+  },
+
+  'functions-request': async () => {
+    const argsInput = core.getInput('args')
+    const result = await functionsRequest(core.getInput('chain', { required: true }), {
+      consumerContract: core.getInput('consumer-contract', { required: true }),
+      source: core.getInput('source-code', { required: true }),
+      args: argsInput ? JSON.parse(argsInput) : [],
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
     setJsonOutput('result', result)
   },
 

@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import {
   functionsCreateSubscription,
   functionsGetSubscription,
+  functionsRequest,
   ChainlinkError,
 } from '../src/chainlink.js'
 import { bridge } from '@w3-io/action-core'
@@ -129,6 +130,55 @@ describe('functionsGetSubscription', () => {
     await assert.rejects(
       () => functionsGetSubscription('7', 'solana'),
       (err) => err instanceof ChainlinkError && err.code === 'UNSUPPORTED_CHAIN',
+    )
+  })
+})
+
+describe('functionsRequest', () => {
+  const CONSUMER = '0x1234567890123456789012345678901234567890'
+  const SRC = 'return Functions.encodeString("hello");'
+
+  it('calls sendRequest on the consumer contract', async () => {
+    mockBridge([{ value: { tx_hash: '0xfreq1' } }])
+
+    const result = await functionsRequest('sepolia', {
+      consumerContract: CONSUMER,
+      source: SRC,
+      args: ['a', 'b'],
+    })
+
+    assert.equal(result.txHash, '0xfreq1')
+    assert.equal(result.consumerContract, CONSUMER)
+    assert.equal(result.numArgs, 2)
+    assert.equal(bridgeCalls[0].operation, 'call-contract')
+    assert.equal(bridgeCalls[0].params.contract, CONSUMER)
+    assert.match(bridgeCalls[0].params.method, /sendRequest\(string,string\[\]\)/)
+    assert.deepEqual(bridgeCalls[0].params.args, [SRC, ['a', 'b']])
+  })
+
+  it('defaults args to empty array', async () => {
+    mockBridge([{ value: { tx_hash: '0xfreq2' } }])
+
+    const result = await functionsRequest('sepolia', {
+      consumerContract: CONSUMER,
+      source: SRC,
+    })
+
+    assert.equal(result.numArgs, 0)
+    assert.deepEqual(bridgeCalls[0].params.args, [SRC, []])
+  })
+
+  it('throws MISSING_CONSUMER_CONTRACT when consumer is empty', async () => {
+    await assert.rejects(
+      () => functionsRequest('sepolia', { consumerContract: '', source: SRC }),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_CONSUMER_CONTRACT',
+    )
+  })
+
+  it('throws MISSING_SOURCE when source is empty', async () => {
+    await assert.rejects(
+      () => functionsRequest('sepolia', { consumerContract: CONSUMER, source: '' }),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_SOURCE',
     )
   })
 })
