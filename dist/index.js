@@ -28928,6 +28928,38 @@ async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) 
 }
 
 /**
+ * Remove a consumer contract from a VRF subscription.
+ */
+async function vrfRemoveConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain(
+    'ethereum',
+    'call-contract',
+    {
+      contract: coordinator,
+      method: VRF_INTERFACE.removeConsumer,
+      args: [subscriptionId, consumer],
+      ...net.params,
+    },
+    net.network,
+  )
+
+  return {
+    subscriptionId,
+    consumer,
+    txHash: extractTxHash(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
  * Fund a VRF subscription with native ETH.
  *
  * Uses fundSubscriptionWithNative — avoids the ERC20 approve dance.
@@ -29642,6 +29674,16 @@ const handlers = {
 
   'vrf-add-consumer': async () => {
     const result = await vrfAddConsumer(
+      lib_core.getInput('subscription-id', { required: true }),
+      lib_core.getInput('consumer-contract', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-remove-consumer': async () => {
+    const result = await vrfRemoveConsumer(
       lib_core.getInput('subscription-id', { required: true }),
       lib_core.getInput('consumer-contract', { required: true }),
       lib_core.getInput('chain', { required: true }),
