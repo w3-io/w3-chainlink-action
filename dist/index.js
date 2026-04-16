@@ -29259,15 +29259,40 @@ function resolveFeeToken(feeToken, sourceChain) {
 
 /**
  * Build the CCIP EVM2AnyMessage struct for bridge calls.
+ *
+ * The bridge expects tuple arguments as JSON arrays, not
+ * parenthesized coerce_str strings. The previous encoding produced
+ * `(val1, val2, ...)` which alloy's parser rejected with "Expected a
+ * JSON array for tuple argument." Return arrays directly and let the
+ * bridge's JSON serializer hand them off to alloy's
+ * `DynSolValue::CustomStruct` deserializer.
+ *
+ * Shape of EVM2AnyMessage (from Client.sol):
+ *
+ *   struct EVM2AnyMessage {
+ *     bytes receiver;              // ABI-encoded destination address
+ *     bytes data;                  // arbitrary payload
+ *     EVMTokenAmount[] tokenAmounts;
+ *     address feeToken;            // address(0) => native
+ *     bytes extraArgs;             // `0x` defaults; populate for
+ *                                  // gas-limit / strict hooks.
+ *   }
+ *
+ *   struct EVMTokenAmount {
+ *     address token;
+ *     uint256 amount;
+ *   }
  */
 function buildCcipMessage(receiver, data, tokenAmounts, feeToken, _gasLimit) {
-  // CCIP receiver is bytes — for EVM destinations, ABI-encode the address to 32 bytes
+  // CCIP receiver is bytes — ABI-encode the 20-byte address to 32 bytes.
   const encodedReceiver = '0x' + receiver.replace(/^0x/, '').toLowerCase().padStart(64, '0')
-  // Format as parenthesized tuple string for DynSolType::coerce_str.
-  // The bridge converts non-string args via JSON.stringify, but coerce_str
-  // expects tuple syntax: (val1, val2, ...) not [val1, val2, ...]
-  const amounts = tokenAmounts.map((ta) => `(${ta.token}, ${ta.amount})`).join(', ')
-  return `(${encodedReceiver}, ${data || '0x'}, [${amounts}], ${feeToken}, 0x)`
+  return [
+    encodedReceiver,
+    data || '0x',
+    tokenAmounts.map((ta) => [ta.token, ta.amount]),
+    feeToken,
+    '0x',
+  ]
 }
 
 /**
