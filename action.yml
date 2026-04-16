@@ -8,8 +8,8 @@ inputs:
       Operation to perform. Price Feeds: get-price, get-feed-info, list-feeds.
       Proof of Reserve: por-get-reserves. CCIP: ccip-send, ccip-estimate-fee.
       VRF: vrf-create-subscription, vrf-fund-subscription, vrf-add-consumer,
-      vrf-get-subscription, vrf-request. Functions: functions-create-subscription,
-      functions-get-subscription.
+      vrf-remove-consumer, vrf-get-subscription, vrf-request.
+      Functions: functions-create-subscription, functions-get-subscription.
     required: true
 
   # Common inputs

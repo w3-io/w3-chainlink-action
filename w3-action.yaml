@@ -238,6 +238,32 @@ commands:
         type: object
         description: Result with subscriptionId, consumer, txHash, coordinator, chain
 
+  - name: vrf-remove-consumer
+    description: >
+      Un-whitelist a consumer contract from a VRF subscription.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: VRF subscription ID
+      consumer-contract:
+        type: string
+        required: true
+        description: Consumer contract address to remove
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Result with subscriptionId, consumer, txHash, coordinator, chain
+
   - name: vrf-get-subscription
     description: >
       Get VRF subscription details including balance, consumer list,

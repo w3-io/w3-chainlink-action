@@ -11,6 +11,7 @@ import {
   vrfFundSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
+  vrfRemoveConsumer,
   vrfRequest,
   functionsCreateSubscription,
   functionsGetSubscription,
@@ -130,6 +131,16 @@ const handlers = {
 
   'vrf-add-consumer': async () => {
     const result = await vrfAddConsumer(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('consumer-contract', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-remove-consumer': async () => {
+    const result = await vrfRemoveConsumer(
       core.getInput('subscription-id', { required: true }),
       core.getInput('consumer-contract', { required: true }),
       core.getInput('chain', { required: true }),

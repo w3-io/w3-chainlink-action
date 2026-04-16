@@ -211,6 +211,19 @@ Whitelist a consumer contract on a subscription. **Write operation.**
 
 **Output:** `{ subscriptionId, consumer, txHash, coordinator, chain }`
 
+#### `vrf-remove-consumer`
+
+Un-whitelist a consumer contract from a subscription. **Write operation.** Mirrors `vrf-add-consumer`; useful when rotating consumers or decommissioning a contract.
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `subscription-id`   | string | Yes      | Subscription ID                              |
+| `consumer-contract` | string | Yes      | Consumer contract address to remove          |
+| `chain`             | string | Yes      | Target chain                                 |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ subscriptionId, consumer, txHash, coordinator, chain }`
+
 #### `vrf-get-subscription`
 
 Get subscription details including balance, consumers, and request count.
