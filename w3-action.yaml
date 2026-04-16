@@ -165,6 +165,41 @@ commands:
         type: object
         description: Send result with status, txHash, fee, sourceChain, destinationChain, router
 
+  - name: ccip-get-message
+    description: >
+      Query CCIP message delivery status by scanning ExecutionStateChanged
+      events on the destination chain's OffRamp. Supports both v1.5+ and
+      legacy v1.2/v1.3 event signatures.
+    inputs:
+      message-id:
+        type: string
+        required: true
+        description: Message ID returned from ccip-send
+      chain:
+        type: string
+        required: true
+        description: Destination chain
+      offramp:
+        type: string
+        required: true
+        description: Destination OffRamp address
+      from-block:
+        type: string
+        required: false
+        description: Start block for event scan (default "0")
+      to-block:
+        type: string
+        required: false
+        description: End block for event scan (default "latest")
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: State info with state, stateCode, sequenceNumber, blockNumber, transactionHash
+
   # ── VRF ──────────────────────────────────────────────────────────
 
   - name: vrf-create-subscription

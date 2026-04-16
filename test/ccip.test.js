@@ -7,7 +7,7 @@
 
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { ccipEstimateFee, ccipSend, ChainlinkError } from '../src/chainlink.js'
+import { ccipEstimateFee, ccipGetMessage, ccipSend, ChainlinkError } from '../src/chainlink.js'
 import { bridge } from '@w3-io/action-core'
 
 let originalChain
@@ -171,5 +171,126 @@ describe('ccipSend', () => {
     assert.equal(bridgeCalls[1].params.contract, '0x0BF3dE8c5D3e8A2B34D2BEeB17ABfCeBaf363A59')
     const args = bridgeCalls[1].params.args
     assert.equal(args[0], '14767482510784806043') // fuji selector
+  })
+})
+
+describe('ccipGetMessage', () => {
+  const MSG_ID = '0xabc123000000000000000000000000000000000000000000000000000000dead'
+  const OFFRAMP = '0x1111111111111111111111111111111111111111'
+
+  it('returns SUCCESS state when v1.5 event matches', async () => {
+    // First query (v1.5 signature) returns a matching event.
+    mockBridge([
+      {
+        value: [
+          {
+            blockNumber: '0xa1',
+            transactionHash: '0xtx1',
+            topics: [
+              '0x84f4178f0724c8855c4ba94203d6af73647c851f4b23d29ab0b86aa9a7148079',
+              '0x0000000000000000000000000000000000000000000000000000000000000007',
+              MSG_ID,
+            ],
+            // state = 2 (SUCCESS)
+            data: '0x0000000000000000000000000000000000000000000000000000000000000002',
+          },
+        ],
+      },
+    ])
+
+    const result = await ccipGetMessage(MSG_ID, 'base', { offramp: OFFRAMP })
+
+    assert.equal(result.state, 'SUCCESS')
+    assert.equal(result.stateCode, 2)
+    assert.equal(result.sequenceNumber, '7')
+    assert.equal(result.offramp, OFFRAMP)
+    assert.equal(result.transactionHash, '0xtx1')
+    assert.equal(result.messageId, MSG_ID)
+
+    // Verify the bridge call topics filter
+    assert.equal(bridgeCalls[0].operation, 'get-events')
+    assert.equal(bridgeCalls[0].params.address, OFFRAMP)
+    assert.equal(
+      bridgeCalls[0].params.topics[0],
+      '0x84f4178f0724c8855c4ba94203d6af73647c851f4b23d29ab0b86aa9a7148079',
+    )
+    assert.equal(bridgeCalls[0].params.topics[2], MSG_ID)
+  })
+
+  it('falls back to legacy (pre-v1.5) event signature', async () => {
+    mockBridge([
+      { value: [] }, // v1.5 query returns nothing
+      {
+        value: [
+          {
+            blockNumber: '0xa2',
+            transactionHash: '0xtx2',
+            topics: [
+              '0xd4f851956a5d67c3997d1c9205045fef79bae2947fdee7e9e2641abc7391ef65',
+              '0x000000000000000000000000000000000000000000000000000000000000000c',
+              MSG_ID,
+            ],
+            data: '0x0000000000000000000000000000000000000000000000000000000000000003', // FAILURE
+          },
+        ],
+      },
+    ])
+
+    const result = await ccipGetMessage(MSG_ID, 'base', { offramp: OFFRAMP })
+
+    assert.equal(result.state, 'FAILURE')
+    assert.equal(result.sequenceNumber, '12')
+    assert.equal(bridgeCalls.length, 2) // v1.5 tried, then legacy
+  })
+
+  it('returns NOT_FOUND when neither signature matches', async () => {
+    mockBridge([{ value: [] }, { value: [] }])
+
+    const result = await ccipGetMessage(MSG_ID, 'base', { offramp: OFFRAMP })
+
+    assert.equal(result.state, 'NOT_FOUND')
+    assert.equal(result.stateCode, null)
+    assert.equal(result.sequenceNumber, undefined)
+  })
+
+  it('normalizes short messageId hex to bytes32', async () => {
+    mockBridge([
+      {
+        value: [
+          {
+            blockNumber: '0xa3',
+            transactionHash: '0xtx3',
+            topics: [
+              '0x84f4178f0724c8855c4ba94203d6af73647c851f4b23d29ab0b86aa9a7148079',
+              '0x0000000000000000000000000000000000000000000000000000000000000001',
+              '0x000000000000000000000000000000000000000000000000000000000000dead',
+            ],
+            data: '0x0000000000000000000000000000000000000000000000000000000000000002',
+          },
+        ],
+      },
+    ])
+
+    const result = await ccipGetMessage('0xdead', 'base', { offramp: OFFRAMP })
+
+    assert.equal(
+      bridgeCalls[0].params.topics[2],
+      '0x000000000000000000000000000000000000000000000000000000000000dead',
+    )
+    assert.equal(result.state, 'SUCCESS')
+  })
+
+  it('throws MISSING_MESSAGE_ID when id empty', async () => {
+    await assert.rejects(
+      () => ccipGetMessage('', 'base', { offramp: OFFRAMP }),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_MESSAGE_ID',
+    )
+  })
+
+  it('throws MISSING_OFFRAMP when offramp empty', async () => {
+    await assert.rejects(
+      () => ccipGetMessage(MSG_ID, 'base', {}),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_OFFRAMP',
+    )
   })
 })

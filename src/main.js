@@ -6,6 +6,7 @@ import {
   listFeeds,
   getReserves,
   ccipEstimateFee,
+  ccipGetMessage,
   ccipSend,
   vrfCreateSubscription,
   vrfFundSubscription,
@@ -92,6 +93,20 @@ const handlers = {
         tokenAmounts: tokenAmounts ? JSON.parse(tokenAmounts) : [],
         feeToken: core.getInput('fee-token') || 'native',
         gasLimit: core.getInput('gas-limit') || '200000',
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'ccip-get-message': async () => {
+    const result = await ccipGetMessage(
+      core.getInput('message-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        offramp: core.getInput('offramp', { required: true }),
+        fromBlock: core.getInput('from-block') || '0',
+        toBlock: core.getInput('to-block') || 'latest',
         rpcUrl: core.getInput('rpc-url') || undefined,
       },
     )
