@@ -426,18 +426,24 @@ export async function ccipSend(
     value = String(BigInt(fee) + BigInt(fee) / 10n)
   }
 
-  const receipt = await bridge.chain(
-    'ethereum',
-    'call-contract',
-    {
-      contract: router,
-      method: CCIP_INTERFACE.ccipSend,
-      abi: CCIP_ABI,
-      args: [destSelector, message],
-      ...(value ? { value } : {}),
-      ...srcNet.params,
-    },
-    srcNet.network,
+  // Unwrap the bridge response. `unwrapBridgeResult` throws on
+  // {ok: false}, otherwise returns the inner {txHash, ...} object.
+  // Without this, extractTxHash sees the envelope and falls through
+  // to String(receipt) -> "[object Object]".
+  const receipt = unwrapBridgeResult(
+    await bridge.chain(
+      'ethereum',
+      'call-contract',
+      {
+        contract: router,
+        method: CCIP_INTERFACE.ccipSend,
+        abi: CCIP_ABI,
+        args: [destSelector, message],
+        ...(value ? { value } : {}),
+        ...srcNet.params,
+      },
+      srcNet.network,
+    ),
   )
 
   return {
@@ -448,7 +454,6 @@ export async function ccipSend(
     destinationChain,
     router,
     destinationSelector: destSelector,
-    _debug_receipt: receipt,
   }
 }
 
