@@ -69,35 +69,74 @@ jobs:
           echo "${{ steps.list-feeds.outputs.result }}"
 
   # ── Proof of Reserve (read-only) ────────────────────────────────
-  # NOTE: PoR commented out — the WBTC PoR feed ABI decoding fails
-  # with "buffer overrun while deserializing". The feed contract may
-  # have migrated or changed interface. Re-enable after verifying the
-  # feed address and ABI are current.
-  # proof-of-reserve:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     # por-get-reserves: use a known PoR feed on Ethereum mainnet
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: por
-  #       with:
-  #         command: por-get-reserves
-  #         # WBTC Proof of Reserve feed on Ethereum
-  #         feed-address: '0xa81FE04086865e63E12dD3776978E49DEEa2ea4e'
-  #         chain: ethereum
-  #
-  #     - run: |
-  #         echo "=== Proof of Reserve ==="
-  #         echo "${{ steps.por.outputs.result }}"
+  proof-of-reserve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@main
+        id: por
+        with:
+          command: por-get-reserves
+          pair: WBTC/BTC
+          chain: ethereum
+          rpc-url: https://ethereum-rpc.publicnode.com
 
-  # ── CCIP (read + write) ─────────────────────────────────────────
-  # NOTE: CCIP steps commented out — the bridge expects JSON arrays for
-  # tuple arguments but buildCcipMessage() formats them as parenthesized
-  # strings for DynSolType::coerce_str. This is a code fix in the bridge
-  # or chainlink.js, not a YAML fix. Re-enable after the tuple encoding
-  # is resolved.
-  # ccip:
+      - run: |
+          echo "=== Proof of Reserve ==="
+          echo "${{ steps.por.outputs.result }}"
+
+  # ── CCIP fee estimation (read-only) ─────────────────────────────
+  ccip-read:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@main
+        id: ccip-fee-mainnet
+        with:
+          command: ccip-estimate-fee
+          source-chain: base
+          destination-chain: ethereum
+          receiver: '0xe4E402962943c4EB2253f666575eE12700e78e90'
+          fee-token: native
+          rpc-url: https://base-rpc.publicnode.com
+
+      - uses: w3-io/w3-chainlink-action@main
+        id: ccip-fee-testnet
+        with:
+          command: ccip-estimate-fee
+          source-chain: base-sepolia
+          destination-chain: sepolia
+          receiver: '0xe4E402962943c4EB2253f666575eE12700e78e90'
+          fee-token: native
+          rpc-url: https://base-sepolia-rpc.publicnode.com
+
+      - run: |
+          echo "=== CCIP Fee: base → ethereum ==="
+          echo "${{ steps.ccip-fee-mainnet.outputs.result }}"
+          echo "=== CCIP Fee: base-sepolia → sepolia ==="
+          echo "${{ steps.ccip-fee-testnet.outputs.result }}"
+
+  # ── CCIP send (write) ───────────────────────────────────────────
+  # ccip-send code path is fixed (buildCcipMessage emits JSON arrays,
+  # receipt is unwrapped, txHash is extracted). Commented out until
+  # we have a stable testnet RPC — public RPCs for Base Sepolia
+  # rate-limit at the second contract write, and mainnet would
+  # burn real ETH. Re-enable with a paid Alchemy/Infura key:
+  #
+  # ccip-send-demo:
   #   runs-on: ubuntu-latest
   #   steps:
+  #     - uses: w3-io/w3-chainlink-action@main
+  #       id: ccip-send
+  #       env:
+  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+  #       bridge-allow: [ethereum/call-contract]
+  #       with:
+  #         command: ccip-send
+  #         source-chain: base-sepolia
+  #         destination-chain: sepolia
+  #         receiver: '0xe4E402962943c4EB2253f666575eE12700e78e90'
+  #         fee-token: native
+  #         data: '0xdeadbeef'
+  #         rpc-url: ${{ secrets.ALCHEMY_BASE_SEPOLIA_RPC }}
   #     # ccip-estimate-fee (read-only)
   #     - uses: w3-io/w3-chainlink-action@main
   #       id: ccip-fee
