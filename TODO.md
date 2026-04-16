@@ -1,5 +1,25 @@
 # TODO
 
+## Known blockers — need external action
+
+- [ ] **Paid RPC for write tests.** Public RPCs (publicnode.com,
+      base.org, etc.) rate-limit the second tx per run. The bridge
+      then ends up with "already known" errors for minutes. An
+      Alchemy or Infura paid tier per chain unblocks `ccip-send`,
+      VRF tx submission, Functions subscription funding — anything
+      that does a write. Set via `ALCHEMY_BASE_RPC`,
+      `ALCHEMY_ETH_RPC`, `ALCHEMY_BASE_SEPOLIA_RPC`.
+- [ ] **VRF subscription setup.** Create a subscription at
+      [vrf.chain.link](https://vrf.chain.link) on Base Sepolia,
+      fund with faucet LINK, deploy the consumer, add it.
+      Unblocks 5 commands (`vrf-create-subscription`,
+      `-get-subscription`, `-fund-subscription`, `-add-consumer`,
+      `-request`).
+- [ ] **Functions subscription setup.** Create at
+      [functions.chain.link](https://functions.chain.link) same way.
+      Unblocks `functions-create-subscription` and
+      `functions-get-subscription`.
+
 ## v0.2.0 — Complete the product coverage
 
 - [ ] `functions-request` — execute arbitrary JS source via Chainlink Functions DON

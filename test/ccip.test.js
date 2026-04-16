@@ -128,7 +128,7 @@ describe('ccipSend', () => {
     assert.equal(bridgeCalls[1].operation, 'call-contract')
   })
 
-  it('formats token amounts as strings', async () => {
+  it('formats token amounts as nested arrays', async () => {
     mockBridge([{ value: '100000000000000' }, { value: { tx_hash: '0x123' } }])
 
     await ccipSend('sepolia', 'arbitrum-sepolia', {
@@ -137,9 +137,11 @@ describe('ccipSend', () => {
     })
 
     // bridgeCalls[0] = getFee, bridgeCalls[1] = ccipSend
-    const args = bridgeCalls[1].params.args
-    // args[1] is a parenthesized tuple string for coerce_str
-    assert.ok(args[1].includes('500'))
+    // args[1] is the EVM2AnyMessage tuple as a nested JSON array.
+    // tokenAmounts is at index 2 of that tuple.
+    const message = bridgeCalls[1].params.args[1]
+    assert.ok(Array.isArray(message), 'message should be an array')
+    assert.deepEqual(message[2], [['0xToken', 500]])
   })
 
   it('sends with empty tokenAmounts for message-only transfers', async () => {
@@ -152,9 +154,10 @@ describe('ccipSend', () => {
 
     assert.equal(result.status, 'sent')
     // bridgeCalls[0] = getFee, bridgeCalls[1] = ccipSend
-    const args = bridgeCalls[1].params.args
-    // args[1] is a tuple string with empty tokenAmounts: [..., [], ...]
-    assert.ok(args[1].includes('[]'))
+    const message = bridgeCalls[1].params.args[1]
+    assert.ok(Array.isArray(message))
+    assert.deepEqual(message[2], []) // empty tokenAmounts array
+    assert.equal(message[1], '0xdeadbeef') // data field
   })
 
   it('uses the correct testnet router and selector', async () => {
