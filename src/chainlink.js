@@ -653,6 +653,52 @@ export async function vrfRequest(chain, { consumerContract, numWords = 1, rpcUrl
 // ── Functions (Chainlink Functions) ────────────────────────────────
 
 /**
+ * Trigger a Chainlink Functions DON computation by calling
+ * `sendRequest(string source, string[] args)` on a user-deployed
+ * consumer contract. Same design rationale as `vrfRequest`:
+ * Functions requires the caller of `router.sendRequest` to be a
+ * registered consumer *contract*, and fulfillment callbacks land
+ * on that contract's `fulfillRequest` hook — neither of which an
+ * EOA can satisfy.
+ *
+ * The consumer contract holds the subscription ID, DON ID, and
+ * callback gas limit. This action only passes the JS source and
+ * (optional) argument list. See `contracts/W3FunctionsConsumer.sol`
+ * for the minimal reference consumer.
+ */
+export async function functionsRequest(
+  chain,
+  { consumerContract, source, args = [], rpcUrl } = {},
+) {
+  if (!consumerContract)
+    throw new ChainlinkError('MISSING_CONSUMER_CONTRACT', 'consumer-contract is required')
+  if (!source) throw new ChainlinkError('MISSING_SOURCE', 'source is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const router = lookupFunctionsRouter(chain)
+
+  const receipt = await bridge.chain(
+    'ethereum',
+    'call-contract',
+    {
+      contract: consumerContract,
+      method: 'function sendRequest(string,string[]) returns (bytes32)',
+      args: [source, args],
+      ...net.params,
+    },
+    net.network,
+  )
+
+  return {
+    txHash: extractTxHash(receipt),
+    consumerContract,
+    numArgs: args.length,
+    router,
+    chain,
+  }
+}
+
+/**
  * Create a Chainlink Functions subscription.
  */
 export async function functionsCreateSubscription(chain, { rpcUrl } = {}) {

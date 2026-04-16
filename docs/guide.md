@@ -269,6 +269,24 @@ Get subscription details including balance, owner, and consumer list.
 
 **Output:** `{ subscriptionId, chain, router, balance, owner, consumers }`
 
+#### `functions-request`
+
+Trigger a Chainlink Functions DON computation by calling `sendRequest(string source, string[] args)` on a user-deployed consumer contract. Fulfillment is asynchronous — the DON calls back into your consumer's `fulfillRequest` hook (typically 1–3 blocks later).
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `chain`             | string | Yes      | Target chain                                 |
+| `consumer-contract` | string | Yes      | Address of your Functions consumer           |
+| `source-code`       | string | Yes      | Inline JS executed by the DON                |
+| `args`              | string | No       | JSON array of string args (`["a","b"]`)      |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ txHash, consumerContract, numArgs, router, chain }`
+
+**Why via a consumer contract, not the router?** Functions requires the caller of `router.sendRequest` to be a registered consumer contract, and fulfillment callbacks land on `fulfillRequest(requestId, response, err)` — neither of which an EOA can satisfy.
+
+**Required consumer signature:** your contract must expose `function sendRequest(string calldata source, string[] calldata args) external returns (bytes32)` and internally call `_sendRequest(...)` via Chainlink's `FunctionsClient` base. The contract holds the subscription ID, DON ID, and callback gas limit as constructor / storage values — the action only passes `source` and `args`. Minimal reference consumer in the action repo at `contracts/W3FunctionsConsumer.sol`.
+
 ---
 
 ## Authentication

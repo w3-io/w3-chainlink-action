@@ -336,3 +336,35 @@ commands:
       result:
         type: object
         description: Subscription details with subscriptionId, chain, router, balance, owner, consumers
+
+  - name: functions-request
+    description: >
+      Trigger a Chainlink Functions DON computation by calling
+      sendRequest on a user-deployed consumer contract. Fulfillment
+      is asynchronous and lands on the consumer's fulfillRequest hook.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      consumer-contract:
+        type: string
+        required: true
+        description: Deployed Functions consumer address
+      source-code:
+        type: string
+        required: true
+        description: Inline JS executed by the DON
+      args:
+        type: string
+        required: false
+        description: JSON array of string args
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: Request result with txHash, consumerContract, numArgs, router, chain
