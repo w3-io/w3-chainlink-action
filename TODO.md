@@ -9,13 +9,22 @@ of public RPCs to avoid rate limits.
 ✅ **VRF subscription on Ethereum Sepolia**:
 `71807528537906860133404221822604258614766191788723848022770699723800904247411`
 (stored as repo var `CHAINLINK_VRF_SUB_ID`). Funded with 4 LINK, owned by
-the bridge signer `0xe4E40...e90`. No consumers yet.
+the bridge signer `0xe4E40...e90`. Consumer added:
+`0x292D6d64603Dc555541E6aa8Db19Ed145479D241` (W3VRFConsumer, source in
+`contracts/W3VRFConsumer.sol`).
 
-✅ **Functions subscription**: `6491` (stored as `CHAINLINK_FUNCTIONS_SUB_ID`).
-Exists on Ethereum Sepolia but owned by a different wallet
-(`0xbF0B95...1cBE`). Can read its state but can't add consumers from our
-signer. Either (a) create a new Functions sub from our signer wallet,
-or (b) have the 0xbF0B95 wallet add our signer as a consumer.
+✅ **VRF write path verified on-chain.** `addConsumer` tx
+`0x9405fae6…985ed6f2`, `requestRandomWords` tx `0x095bd846…6f7b92a`
+(request ID `47887014…445422`). `RandomWordsRequested` event emitted
+from the coordinator at block 10673234; Sepolia VRF oracle fulfillment
+is asynchronous and can take 5–20+ min. Read `s_lastRequestFulfilled()`
+on the consumer to check.
+
+⚠️ **Functions subscription 6491**: owned by `0xbF0B95...1cBE`, not the
+bridge signer. `functions-get-subscription` (read-only) works against
+it. Write-path exercise (`functions-create-subscription` from our
+signer) is pending a path decision — either fresh sub from our signer
+or ask the `0xbF0B95` wallet to `addConsumer` a signer-owned consumer.
 
 ## Blocked on protocol-side fix
 
@@ -27,14 +36,8 @@ or (b) have the 0xbF0B95 wallet add our signer as a consumer.
       on-chain return is well-formed. Filing a protocol issue would be
       the right next step.
 
-## Blocked on consumer contract + mempool clear
+## Blocked on external state
 
-- [ ] **`vrf-create-subscription`, `vrf-fund-subscription`,
-      `vrf-add-consumer`, `vrf-request`.** All require a consumer
-      contract on Sepolia that implements `fulfillRandomWords(uint256,
-uint256[])`. Deploy a minimal reference consumer (e.g. the one
-      from Chainlink docs), add our bridge signer as authorized, point
-      at our VRF sub.
 - [ ] **`ccip-send`.** Code is fixed (tuple encoding + receipt
       unwrap). One successful send verified during development on Base
       Sepolia. Subsequent attempts return "already known" /

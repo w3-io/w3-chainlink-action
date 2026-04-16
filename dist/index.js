@@ -28964,39 +28964,35 @@ async function vrfFundSubscription(subscriptionId, chain, { amount, rpcUrl } = {
 }
 
 /**
- * Request random words from VRF v2.5.
+ * Request random words from VRF v2.5 by calling the user's consumer
+ * contract.
+ *
+ * VRF v2.5 requires the caller of `coordinator.requestRandomWords` to
+ * be a contract registered as a consumer on the subscription — an EOA
+ * cannot initiate a request directly (and even if it could, the
+ * randomness would be lost since EOAs don't implement the
+ * `fulfillRandomWords` callback).
+ *
+ * This command calls `consumer.requestRandomWords(uint32 numWords)`
+ * on a consumer contract the user has deployed. The consumer
+ * internally calls the coordinator with the subscription ID,
+ * keyHash, and callback gas limit it was configured with at deploy
+ * time. See the guide for the minimal consumer contract pattern.
  */
-async function vrfRequest(
-  chain,
-  {
-    subscriptionId,
-    numWords = 1,
-    callbackGasLimit = 100000,
-    requestConfirmations = 3,
-    rpcUrl,
-  } = {},
-) {
-  if (!subscriptionId)
-    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+async function vrfRequest(chain, { consumerContract, numWords = 1, rpcUrl } = {}) {
+  if (!consumerContract)
+    throw new ChainlinkError('MISSING_CONSUMER_CONTRACT', 'consumer-contract is required')
 
   const net = resolveNetwork(chain, rpcUrl)
   const coordinator = lookupVrfCoordinator(chain)
-  const keyHash = lookupVrfKeyHash(chain)
 
   const receipt = await bridge.chain(
     'ethereum',
     'call-contract',
     {
-      contract: coordinator,
-      method: VRF_INTERFACE.requestRandomWords,
-      args: [
-        keyHash,
-        subscriptionId,
-        requestConfirmations,
-        callbackGasLimit,
-        numWords,
-        '0x', // extraArgs (empty = pay in LINK)
-      ],
+      contract: consumerContract,
+      method: 'function requestRandomWords(uint32) returns (uint256)',
+      args: [numWords],
       ...net.params,
     },
     net.network,
@@ -29004,7 +29000,7 @@ async function vrfRequest(
 
   return {
     txHash: extractTxHash(receipt),
-    subscriptionId,
+    consumerContract,
     numWords,
     coordinator,
     chain,
@@ -29307,20 +29303,6 @@ function lookupVrfCoordinator(chain) {
     )
   }
   return addr
-}
-
-/**
- * Look up the VRF key hash for a chain.
- */
-function lookupVrfKeyHash(chain) {
-  const hash = VRF.keyHashes[chain.toLowerCase()]
-  if (!hash) {
-    throw new ChainlinkError(
-      'MISSING_KEY_HASH',
-      `No VRF key hash registered for chain "${chain}". Available: ${Object.keys(VRF.keyHashes).join(', ')}`,
-    )
-  }
-  return hash
 }
 
 /**
@@ -29670,10 +29652,8 @@ const handlers = {
 
   'vrf-request': async () => {
     const result = await vrfRequest(lib_core.getInput('chain', { required: true }), {
-      subscriptionId: lib_core.getInput('subscription-id', { required: true }),
+      consumerContract: lib_core.getInput('consumer-contract', { required: true }),
       numWords: Number(lib_core.getInput('num-words')) || 1,
-      callbackGasLimit: Number(lib_core.getInput('callback-gas-limit')) || 100000,
-      requestConfirmations: Number(lib_core.getInput('request-confirmations')) || 3,
       rpcUrl: lib_core.getInput('rpc-url') || undefined,
     })
     setJsonOutput('result', result)

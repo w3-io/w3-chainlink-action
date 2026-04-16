@@ -225,20 +225,20 @@ Get subscription details including balance, consumers, and request count.
 
 #### `vrf-request`
 
-Request random words from VRF v2.5. Fulfillment is asynchronous.
+Trigger a VRF v2.5 request by calling `requestRandomWords(uint32 numWords)` on a consumer contract you've deployed and registered as a consumer of the subscription. Fulfillment is asynchronous — the oracle calls back into your consumer's `fulfillRandomWords`.
 
-| Input                   | Type   | Required | Description                                                   |
-| ----------------------- | ------ | -------- | ------------------------------------------------------------- |
-| `chain`                 | string | Yes      | Target chain (must have a registered key hash)                |
-| `subscription-id`       | string | Yes      | Funded subscription ID                                        |
-| `num-words`             | string | No       | Number of random words (default `1`, max `500`)               |
-| `callback-gas-limit`    | string | No       | Gas limit for the fulfillment callback (default `100000`)     |
-| `request-confirmations` | string | No       | Block confirmations before fulfillment (default `3`, min `3`) |
-| `rpc-url`               | string | No       | Custom RPC URL (recommended for reliability)                  |
+| Input               | Type   | Required | Description                                     |
+| ------------------- | ------ | -------- | ----------------------------------------------- |
+| `chain`             | string | Yes      | Target chain                                    |
+| `consumer-contract` | string | Yes      | Address of your VRF consumer contract           |
+| `num-words`         | string | No       | Number of random words (default `1`, max `500`) |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability)    |
 
-**Output:** `{ txHash, subscriptionId, numWords, coordinator, chain }`
+**Output:** `{ txHash, consumerContract, numWords, coordinator, chain }`
 
-**Callback gas limit tip:** Each random word costs ~20,000 gas to store. Start with `100000 + 20000 * numWords`.
+**Why via a consumer contract, not the coordinator directly?** VRF v2.5 requires `coordinator.requestRandomWords` to be called from a contract registered as a consumer on the subscription. An EOA (the bridge signer) cannot initiate a request directly, and even if it could, the randomness would be lost because EOAs don't implement `fulfillRandomWords`.
+
+**Required consumer signature:** your contract must expose `function requestRandomWords(uint32 numWords) external returns (uint256)` and internally call the coordinator. The contract holds the subscription ID, key hash, callback gas limit, and confirmation count as constructor / storage values — the action only passes `numWords`. Minimal reference consumer in the action repo at `contracts/W3VRFConsumer.sol`.
 
 ---
 
