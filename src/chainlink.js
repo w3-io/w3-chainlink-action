@@ -509,8 +509,6 @@ export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {})
       {
         contract: coordinator,
         method: VRF_INTERFACE.getSubscription,
-        // Pass the full ABI JSON — the signature-only form trips the
-        // alloy decoder on the dynamic `address[] consumers` return.
         abi: VRF_GET_SUBSCRIPTION_ABI,
         args: [subscriptionId],
         ...net.params,
@@ -519,12 +517,21 @@ export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {})
     ),
   )
 
-  // Normalize the return value
-  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
-  const nativeBalance = Array.isArray(sub) ? sub[1] : sub?.nativeBalance
-  const reqCount = Array.isArray(sub) ? sub[2] : sub?.reqCount
-  const owner = Array.isArray(sub) ? sub[3] : sub?.subOwner
-  const consumers = Array.isArray(sub) ? sub[4] : sub?.consumers
+  // Bridge returns the decoded tuple as a JSON-encoded string.
+  // Parse it the same way functionsGetSubscription does.
+  let data = sub
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      /* use as-is */
+    }
+  }
+  const balance = Array.isArray(data) ? data[0] : data?.balance
+  const nativeBalance = Array.isArray(data) ? data[1] : data?.nativeBalance
+  const reqCount = Array.isArray(data) ? data[2] : data?.reqCount
+  const owner = Array.isArray(data) ? data[3] : data?.subOwner
+  const consumers = Array.isArray(data) ? data[4] : data?.consumers
 
   return {
     subscriptionId,

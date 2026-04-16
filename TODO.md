@@ -26,15 +26,14 @@ it. Write-path exercise (`functions-create-subscription` from our
 signer) is pending a path decision — either fresh sub from our signer
 or ask the `0xbF0B95` wallet to `addConsumer` a signer-owned consumer.
 
-## Blocked on protocol-side fix
+## Cleared: protocol-side decoder fix (merged)
 
-- [ ] **`vrf-get-subscription` bridge decoder bug.** The return tuple
-      `(uint96, uint96, uint64, address, address[])` trips the bridge's
-      alloy-based decoder with "buffer overrun while deserializing" on
-      the dynamic `address[] consumers` tail. Passing the full ABI JSON
-      via `abi: ...` didn't help. Verified via raw `cast call` that the
-      on-chain return is well-formed. Filing a protocol issue would be
-      the right next step.
+✅ **`vrf-get-subscription` bridge decoder bug** — fixed in protocol
+PR #1726 (merged 2026-04-16). Root cause: `abi_decode()` vs
+`abi_decode_params()` in `decode_result()`. The old method treated
+multi-output tuples with dynamic tails as single wrapped values;
+the fix uses the correct flat-sequence decoder. Action-side JSON
+parse also fixed in this PR.
 
 ## Blocked on external state
 

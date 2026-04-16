@@ -94,6 +94,25 @@ describe('vrfGetSubscription', () => {
     assert.equal(bridgeCalls[0].operation, 'read-contract')
   })
 
+  it('parses JSON string result from bridge (real bridge behavior)', async () => {
+    // The bridge returns decoded values as a JSON-encoded string,
+    // not a pre-parsed array. This test simulates real bridge output.
+    mockBridge([
+      {
+        value:
+          '["4000000000000000000","0","0","0xe4E402962943c4EB2253f666575eE12700e78e90",["0x292D6d64603Dc555541E6aa8Db19Ed145479D241"]]',
+      },
+    ])
+
+    const result = await vrfGetSubscription('42', 'sepolia')
+
+    assert.equal(result.balance, '4000000000000000000')
+    assert.equal(result.nativeBalance, '0')
+    assert.equal(result.requestCount, '0')
+    assert.equal(result.owner, '0xe4E402962943c4EB2253f666575eE12700e78e90')
+    assert.deepEqual(result.consumers, ['0x292D6d64603Dc555541E6aa8Db19Ed145479D241'])
+  })
+
   it('throws MISSING_SUBSCRIPTION_ID when subId is empty', async () => {
     await assert.rejects(
       () => vrfGetSubscription('', 'sepolia'),
