@@ -54,22 +54,17 @@ parse also fixed in this PR.
       `streams-list-feeds` and `streams-fetch-report` against
       `api.testnet-dataengine.chain.link` and update RESULTS.md.
 
-## v0.2.0 — Complete the product coverage
+## v0.2.0 — Complete the product coverage ✅ (shipped)
 
-- [ ] `functions-request` — execute arbitrary JS source via Chainlink Functions DON
-- [ ] `ccip-get-message` — read CCIP message status from OnRamp by message ID
-- [ ] `vrf-remove-consumer` — remove a consumer from a VRF subscription
+- [x] `functions-request` — execute arbitrary JS source via Chainlink Functions DON (PR #8)
+- [x] `ccip-get-message` — resolve CCIP message state via OffRamp event scan (PR #7)
+- [x] `vrf-remove-consumer` — remove a consumer from a VRF subscription (PR #6)
 
 ## v0.3.0 — Polling and async patterns
 
 - [ ] `ccip-wait-for-delivery` — poll destination chain for CCIP message finalization
 - [ ] `vrf-wait-for-fulfillment` — poll for VRF callback event with random words
 - [ ] `functions-wait-for-fulfillment` — poll for Functions response
-
-## v0.4.0 — Data Streams
-
-- [ ] `streams-fetch-report` — fetch real-time market data report (REST, needs API key)
-- [ ] `streams-list-feeds` — list available Data Streams feeds (REST, needs API key)
 
 ## Improvements
 
