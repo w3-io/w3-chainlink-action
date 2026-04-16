@@ -22,6 +22,7 @@
  * All on-chain writes go through `bridge.chain('ethereum', 'call-contract', ...)`
  */
 
+import { createHash, createHmac } from 'node:crypto'
 import { W3ActionError, bridge } from '@w3-io/action-core'
 import {
   FEEDS,
@@ -752,6 +753,116 @@ export async function functionsGetSubscription(subscriptionId, chain, { rpcUrl }
   }
 }
 
+// ── Data Streams (REST, not bridge) ────────────────────────────────
+//
+// Chainlink Data Streams is a pull-based REST API for high-frequency
+// market data, distinct from on-chain Price Feeds. Reports are signed
+// blobs that can be verified on-chain later. Access is gated behind
+// Chainlink's onboarding (client ID + client secret).
+//
+// Endpoints (source: smartcontractkit/data-streams-sdk):
+//   GET /api/v1/feeds            — list available feeds
+//   GET /api/v1/reports/latest?feedID=0x…   — latest report for a feed
+//   GET /api/v1/reports?feedID=0x…&timestamp=…  — report at/near ts
+//
+// Auth: three headers.
+//   Authorization                       : <client ID>
+//   X-Authorization-Timestamp           : <ms since epoch>
+//   X-Authorization-Signature-SHA256    : HMAC-SHA256 of
+//       "<METHOD> <path?query> <sha256(body)> <client_id> <ts>"
+//     using the client secret as the HMAC key. Empty string hash is
+//     used for bodyless GETs.
+
+const DEFAULT_STREAMS_API = 'https://api.dataengine.chain.link'
+// Testnet endpoint for reference — callers override via `streams-api-url`:
+//   https://api.testnet-dataengine.chain.link
+
+function streamsAuthHeaders(clientId, clientSecret, method, url, body = '') {
+  const parsed = new URL(url)
+  const pathWithQuery = parsed.pathname + parsed.search
+  const ts = Date.now()
+  const bodyHash = sha256Hex(body)
+  const stringToSign = `${method} ${pathWithQuery} ${bodyHash} ${clientId} ${ts}`
+  const signature = hmacSha256Hex(clientSecret, stringToSign)
+  return {
+    Authorization: clientId,
+    'X-Authorization-Timestamp': String(ts),
+    'X-Authorization-Signature-SHA256': signature,
+  }
+}
+
+async function streamsRequest({ clientId, clientSecret, apiUrl = DEFAULT_STREAMS_API, path }) {
+  if (!clientId) {
+    throw new ChainlinkError('MISSING_STREAMS_CLIENT_ID', 'streams-client-id is required')
+  }
+  if (!clientSecret) {
+    throw new ChainlinkError('MISSING_STREAMS_CLIENT_SECRET', 'streams-client-secret is required')
+  }
+  const url = apiUrl.replace(/\/+$/, '') + path
+  const headers = streamsAuthHeaders(clientId, clientSecret, 'GET', url)
+  const res = await fetch(url, { method: 'GET', headers })
+  const text = await res.text()
+  if (!res.ok) {
+    throw new ChainlinkError(
+      'STREAMS_API_ERROR',
+      `Data Streams API ${res.status}: ${text.slice(0, 300)}`,
+    )
+  }
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw new ChainlinkError(
+      'STREAMS_PARSE_ERROR',
+      `Invalid JSON from Data Streams: ${text.slice(0, 200)}`,
+    )
+  }
+}
+
+/**
+ * List all available Data Streams feeds.
+ *
+ * @param {object} options
+ * @param {string} options.clientId - Chainlink-issued client ID
+ * @param {string} options.clientSecret - Chainlink-issued client secret
+ * @param {string} [options.apiUrl] - Override the default API URL (e.g. use
+ *                                    `api.testnet-dataengine.chain.link` for testnet)
+ * @returns {{feeds: Array}} List of feed metadata objects
+ */
+export async function streamsListFeeds({ clientId, clientSecret, apiUrl } = {}) {
+  return streamsRequest({
+    clientId,
+    clientSecret,
+    apiUrl,
+    path: '/api/v1/feeds',
+  })
+}
+
+/**
+ * Fetch the latest report, or a specific report by timestamp, for a feed.
+ *
+ * @param {string} feedId - Hex-encoded feed ID (0x…)
+ * @param {object} options
+ * @param {string} options.clientId
+ * @param {string} options.clientSecret
+ * @param {number} [options.timestamp] - If set, fetch the report valid at this
+ *                                        UNIX timestamp (seconds). Omit for latest.
+ * @param {string} [options.apiUrl]
+ */
+export async function streamsFetchReport(
+  feedId,
+  { clientId, clientSecret, timestamp, apiUrl } = {},
+) {
+  if (!feedId) {
+    throw new ChainlinkError('MISSING_FEED_ID', 'feed-id is required (e.g. "0x0003...")')
+  }
+  const encoded = encodeURIComponent(feedId)
+  const path =
+    timestamp == null
+      ? `/api/v1/reports/latest?feedID=${encoded}`
+      : `/api/v1/reports?feedID=${encoded}&timestamp=${timestamp}`
+  return streamsRequest({ clientId, clientSecret, apiUrl, path })
+}
+
 // ── Internal helpers ───────────────────────────────────────────────
 
 /**
@@ -1060,4 +1171,14 @@ function parseRoundData(raw, decimals) {
     price,
     updatedAt,
   }
+}
+
+/** sha256 of a string, hex-encoded. Used for the Data Streams body hash. */
+function sha256Hex(s) {
+  return createHash('sha256').update(s).digest('hex')
+}
+
+/** HMAC-SHA256 of a message, hex-encoded. Used for the Data Streams signature. */
+function hmacSha256Hex(key, message) {
+  return createHmac('sha256', key).update(message).digest('hex')
 }

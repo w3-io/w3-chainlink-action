@@ -90,15 +90,21 @@ inputs:
     description: 'JSON object of secrets for Functions source code.'
     required: false
 
-  # Data Streams inputs
+  # Data Streams (Tier 4)
   feed-id:
-    description: 'Data Streams feed ID (hex).'
+    description: 'Data Streams feed ID (hex, e.g. 0x0003...) for streams-fetch-report.'
     required: false
   timestamp:
-    description: 'Timestamp for Data Streams report fetch (Unix seconds).'
+    description: 'UNIX timestamp (seconds) for streams-fetch-report at a specific moment. Omit for latest.'
     required: false
-  api-key:
-    description: 'Chainlink Data Streams API key (required for streams-* commands only).'
+  streams-client-id:
+    description: 'Chainlink Data Streams client ID (UUID) issued at onboarding.'
+    required: false
+  streams-client-secret:
+    description: 'Chainlink Data Streams client secret (HMAC key).'
+    required: false
+  streams-api-url:
+    description: 'Data Streams REST base URL. Defaults to mainnet. Set to testnet URL for testing.'
     required: false
 
   # Async fulfillment

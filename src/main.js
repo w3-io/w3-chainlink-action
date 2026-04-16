@@ -14,6 +14,8 @@ import {
   vrfRequest,
   functionsCreateSubscription,
   functionsGetSubscription,
+  streamsListFeeds,
+  streamsFetchReport,
   ChainlinkError,
 } from './chainlink.js'
 
@@ -162,6 +164,32 @@ const handlers = {
       core.getInput('chain', { required: true }),
       { rpcUrl: core.getInput('rpc-url') || undefined },
     )
+    setJsonOutput('result', result)
+  },
+
+  // ── Data Streams (Tier 4 — REST, not bridge) ──────────────────
+  //
+  // Data Streams is Chainlink's low-latency pull-based market data
+  // product. Auth is HMAC-SHA256 with a client ID + secret issued by
+  // Chainlink (separate from on-chain feed access).
+
+  'streams-list-feeds': async () => {
+    const result = await streamsListFeeds({
+      clientId: core.getInput('streams-client-id', { required: true }),
+      clientSecret: core.getInput('streams-client-secret', { required: true }),
+      apiUrl: core.getInput('streams-api-url') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  'streams-fetch-report': async () => {
+    const timestampInput = core.getInput('timestamp')
+    const result = await streamsFetchReport(core.getInput('feed-id', { required: true }), {
+      clientId: core.getInput('streams-client-id', { required: true }),
+      clientSecret: core.getInput('streams-client-secret', { required: true }),
+      timestamp: timestampInput ? Number(timestampInput) : undefined,
+      apiUrl: core.getInput('streams-api-url') || undefined,
+    })
     setJsonOutput('result', result)
   },
 }
