@@ -165,7 +165,19 @@ jobs:
   #         echo "=== CCIP Fee Estimate ==="
   #         echo "${{ steps.ccip-fee.outputs.result }}"
 
-  # ── VRF (requires funded subscription) ──────────────────────────
+  # ── VRF: subscription read blocked on bridge decoder ───────────
+  # SKIP: vrf-get-subscription returns (uint96, uint96, uint64,
+  # address, address[]). The bridge's alloy-based decoder fails on
+  # the dynamic `address[] consumers` tail with "buffer overrun
+  # while deserializing", even with the full ABI JSON attached.
+  # Verified live via raw `cast call` — the on-chain return is
+  # well-formed; the limitation is in the bridge. Protocol-side
+  # fix needed. Subscription
+  # 71807528537906860133404221822604258614766191788723848022770699723800904247411
+  # on sepolia is funded (4 LINK, owner matches the bridge signer,
+  # 0 consumers so far).
+
+  # ── VRF writes (requires consumer contract) ─────────────────────
   # NOTE: VRF commands require a funded subscription and consumer contract.
   # To test: create subscription, fund with LINK, deploy consumer, add consumer.
   # vrf:

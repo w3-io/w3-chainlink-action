@@ -35,6 +35,7 @@ import {
   LINK_TOKENS,
   VRF,
   VRF_INTERFACE,
+  VRF_GET_SUBSCRIPTION_ABI,
   FUNCTIONS,
 } from './registry.js'
 
@@ -508,6 +509,9 @@ export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {})
       {
         contract: coordinator,
         method: VRF_INTERFACE.getSubscription,
+        // Pass the full ABI JSON — the signature-only form trips the
+        // alloy decoder on the dynamic `address[] consumers` return.
+        abi: VRF_GET_SUBSCRIPTION_ABI,
         args: [subscriptionId],
         ...net.params,
       },

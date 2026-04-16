@@ -28313,11 +28313,31 @@ const VRF_INTERFACE = {
   addConsumer: 'function addConsumer(uint256, address)',
   removeConsumer: 'function removeConsumer(uint256, address)',
   getSubscription:
-    'function getSubscription(uint256) returns (uint96, uint96, uint64, address, address[])',
+    'function getSubscription(uint256 subId) returns (uint96 balance, uint96 nativeBalance, uint64 reqCount, address owner, address[] consumers)',
   requestRandomWords:
     'function requestRandomWords(bytes32, uint256, uint16, uint32, uint32, bytes) returns (uint256)',
   fundSubscription: 'function fundSubscriptionWithNative(uint256) payable',
 }
+
+// Full ABI JSON for getSubscription. The signature-only form above
+// trips the bridge's alloy decoder on the dynamic `address[]` return;
+// passing the JSON ABI (same pattern CCIP uses) lets the decoder
+// resolve the dynamic tail correctly.
+const VRF_GET_SUBSCRIPTION_ABI = JSON.stringify([
+  {
+    name: 'getSubscription',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'subId', type: 'uint256' }],
+    outputs: [
+      { name: 'balance', type: 'uint96' },
+      { name: 'nativeBalance', type: 'uint96' },
+      { name: 'reqCount', type: 'uint64' },
+      { name: 'owner', type: 'address' },
+      { name: 'consumers', type: 'address[]' },
+    ],
+  },
+])
 
 // ── Functions configuration ────────────────────────────────────────
 
@@ -28846,6 +28866,9 @@ async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {}) {
       {
         contract: coordinator,
         method: VRF_INTERFACE.getSubscription,
+        // Pass the full ABI JSON — the signature-only form trips the
+        // alloy decoder on the dynamic `address[] consumers` return.
+        abi: VRF_GET_SUBSCRIPTION_ABI,
         args: [subscriptionId],
         ...net.params,
       },
