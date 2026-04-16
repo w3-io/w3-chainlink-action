@@ -448,6 +448,7 @@ export async function ccipSend(
     destinationChain,
     router,
     destinationSelector: destSelector,
+    _debug_receipt: receipt,
   }
 }
 
