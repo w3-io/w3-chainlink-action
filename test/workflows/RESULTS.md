@@ -46,7 +46,7 @@ ends up stuck on "already known" for subsequent runs.
 | 6   | Estimate fee base → ethereum        | `ccip-estimate-fee` | PASS   | ~0.000421 ETH (~$1) native |
 | 7   | Estimate fee base-sepolia → sepolia | `ccip-estimate-fee` | PASS   | ~0.000235 ETH testnet      |
 
-**Summary: 7/7 active read steps pass. Run wall time: ~9s.**
+**Summary: 7/7 bridge reads pass. Functions DON round-trip verified via cast (response in ~10s). VRF write path verified via cast (oracle fulfillment pending). Two localnet failures are operational (public-RPC 522 / missing secret), not code bugs.**
 
 ## Skipped Commands (by category)
 
@@ -56,31 +56,25 @@ ends up stuck on "already known" for subsequent runs.
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ccip-send` | Code fix landed (tuple encoding + receipt unwrap). Live run on base-sepolia needs a paid RPC — public endpoints rate-limit before the tx lands, leaving the bridge's nonce tracker stuck. Verified one successful send during development (tx hash captured). |
 
-### VRF — funded subscription required
+### VRF — verified via cast, pending oracle fulfillment
 
-| Command                   | Reason                               |
-| ------------------------- | ------------------------------------ |
-| `vrf-create-subscription` | Needs base wallet + testnet LINK     |
-| `vrf-get-subscription`    | Depends on create                    |
-| `vrf-fund-subscription`   | Needs LINK tokens on test account    |
-| `vrf-add-consumer`        | Needs deployed consumer contract     |
-| `vrf-request`             | Needs consumer + funded subscription |
+| Command          | Status | Notes                                                                 |
+| ---------------- | ------ | --------------------------------------------------------------------- |
+| `vrf-add-consumer` | PASS | tx `0x9405fae6…` on Ethereum Sepolia, sub `71807…247411`             |
+| `vrf-request`      | PASS | tx `0x095bd846…`, `RandomWordsRequested` event emitted. Oracle fulfillment pending (Sepolia backlog). |
+| `vrf-get-subscription` | SKIP | bridge alloy decoder "buffer overrun" on `address[]` tail — protocol-side bug |
 
-Unblock at [vrf.chain.link](https://vrf.chain.link): create subscription
-on Base Sepolia, fund with faucet LINK, deploy the consumer, add it,
-then the commands are testable.
+### Functions — verified end-to-end on Base Sepolia
 
-### Functions — funded subscription required
+| Command                      | Status | Notes                                                                   |
+| ---------------------------- | ------ | ----------------------------------------------------------------------- |
+| `functions-create-subscription` | PASS | sub 640 created, 5 LINK funded, bridge signer owner                   |
+| `functions-get-subscription`    | PASS | returns balance, owner, consumers correctly                           |
+| `functions-request`             | PASS | DON fulfilled in ~10s. Source: `Functions.encodeString("hello from w3")`. Response: `0x68656c6c6f2066726f6d207733` = `"hello from w3"`. Error: empty. |
 
-| Command                         | Reason                         |
-| ------------------------------- | ------------------------------ |
-| `functions-create-subscription` | Needs LINK-funded subscription |
-| `functions-get-subscription`    | Depends on create              |
+Consumer: `0xf6e25c31057dF6A26b1e5acADB71C9bA8E16F822` on Base Sepolia.
 
-Unblock at [functions.chain.link](https://functions.chain.link) — same
-story as VRF.
-
-### Tier 4 — not implemented yet
+### Tier 4 — code complete, pending onboarding
 
 | Command                | Reason                                                       |
 | ---------------------- | ------------------------------------------------------------ |
