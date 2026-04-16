@@ -168,6 +168,27 @@ Send a CCIP cross-chain message (optionally with tokens). **Write operation** re
 
 Track delivery via the [CCIP Explorer](https://ccip.chain.link) using the returned message ID.
 
+#### `ccip-get-message`
+
+Query the delivery status of a CCIP message by scanning `ExecutionStateChanged` events on the destination chain's OffRamp.
+
+CCIP has no `getStatusByMessageId(bytes32)` view — delivery state is stored per-sequence-number on the OffRamp, and the only way to map messageId → sequenceNumber is via the indexed event topic. This command scans both v1.5+ and legacy v1.2/v1.3 event signatures.
+
+| Input        | Type   | Required | Description                                                          |
+| ------------ | ------ | -------- | -------------------------------------------------------------------- |
+| `message-id` | string | Yes      | Message ID returned from `ccip-send`                                 |
+| `chain`      | string | Yes      | Destination chain                                                    |
+| `offramp`    | string | Yes      | Destination OffRamp address (find via CCIP Explorer or `tx receipt`) |
+| `from-block` | string | No       | Start block for event scan (default `"0"`)                           |
+| `to-block`   | string | No       | End block (default `"latest"`)                                       |
+| `rpc-url`    | string | No       | Custom RPC URL                                                       |
+
+**Output:** `{ messageId, chain, offramp, state, stateCode, sequenceNumber, blockNumber, transactionHash }`
+
+**Possible states:** `UNTOUCHED` (0), `IN_PROGRESS` (1), `SUCCESS` (2), `FAILURE` (3), `NOT_FOUND` (no event matched).
+
+**Finding the OffRamp:** open the source-chain send tx on [CCIP Explorer](https://ccip.chain.link), jump to the destination tx, and copy the `to` address (the OffRamp). Alternatively, call `Router.getOffRamps()` on the destination chain and filter by the source chain selector.
+
 ---
 
 ### VRF (Verifiable Random Function)
@@ -206,6 +227,19 @@ Whitelist a consumer contract on a subscription. **Write operation.**
 | ------------------- | ------ | -------- | -------------------------------------------- |
 | `subscription-id`   | string | Yes      | Subscription ID                              |
 | `consumer-contract` | string | Yes      | Consumer contract address                    |
+| `chain`             | string | Yes      | Target chain                                 |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ subscriptionId, consumer, txHash, coordinator, chain }`
+
+#### `vrf-remove-consumer`
+
+Un-whitelist a consumer contract from a subscription. **Write operation.** Mirrors `vrf-add-consumer`; useful when rotating consumers or decommissioning a contract.
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `subscription-id`   | string | Yes      | Subscription ID                              |
+| `consumer-contract` | string | Yes      | Consumer contract address to remove          |
 | `chain`             | string | Yes      | Target chain                                 |
 | `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
 

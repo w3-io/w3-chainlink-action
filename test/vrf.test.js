@@ -11,6 +11,7 @@ import {
   vrfCreateSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
+  vrfRemoveConsumer,
   vrfRequest,
   ChainlinkError,
 } from '../src/chainlink.js'
@@ -94,6 +95,25 @@ describe('vrfGetSubscription', () => {
     assert.equal(bridgeCalls[0].operation, 'read-contract')
   })
 
+  it('parses JSON string result from bridge (real bridge behavior)', async () => {
+    // The bridge returns decoded values as a JSON-encoded string,
+    // not a pre-parsed array. This test simulates real bridge output.
+    mockBridge([
+      {
+        value:
+          '["4000000000000000000","0","0","0xe4E402962943c4EB2253f666575eE12700e78e90",["0x292D6d64603Dc555541E6aa8Db19Ed145479D241"]]',
+      },
+    ])
+
+    const result = await vrfGetSubscription('42', 'sepolia')
+
+    assert.equal(result.balance, '4000000000000000000')
+    assert.equal(result.nativeBalance, '0')
+    assert.equal(result.requestCount, '0')
+    assert.equal(result.owner, '0xe4E402962943c4EB2253f666575eE12700e78e90')
+    assert.deepEqual(result.consumers, ['0x292D6d64603Dc555541E6aa8Db19Ed145479D241'])
+  })
+
   it('throws MISSING_SUBSCRIPTION_ID when subId is empty', async () => {
     await assert.rejects(
       () => vrfGetSubscription('', 'sepolia'),
@@ -120,6 +140,37 @@ describe('vrfAddConsumer', () => {
   it('throws MISSING_CONSUMER when consumer is empty', async () => {
     await assert.rejects(
       () => vrfAddConsumer('42', '', 'sepolia'),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_CONSUMER',
+    )
+  })
+})
+
+describe('vrfRemoveConsumer', () => {
+  it('calls removeConsumer on the coordinator', async () => {
+    mockBridge([{ value: { tx_hash: '0xrm789' } }])
+
+    const result = await vrfRemoveConsumer('42', '0xMyContract', 'sepolia')
+
+    assert.equal(result.subscriptionId, '42')
+    assert.equal(result.consumer, '0xMyContract')
+    assert.equal(result.txHash, '0xrm789')
+    assert.equal(bridgeCalls[0].operation, 'call-contract')
+    assert.match(bridgeCalls[0].params.method, /removeConsumer/)
+    const args = bridgeCalls[0].params.args
+    assert.equal(args[0], '42')
+    assert.equal(args[1], '0xMyContract')
+  })
+
+  it('throws MISSING_SUBSCRIPTION_ID when subId is empty', async () => {
+    await assert.rejects(
+      () => vrfRemoveConsumer('', '0xMyContract', 'sepolia'),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_SUBSCRIPTION_ID',
+    )
+  })
+
+  it('throws MISSING_CONSUMER when consumer is empty', async () => {
+    await assert.rejects(
+      () => vrfRemoveConsumer('42', '', 'sepolia'),
       (err) => err instanceof ChainlinkError && err.code === 'MISSING_CONSUMER',
     )
   })

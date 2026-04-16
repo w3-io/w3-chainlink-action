@@ -6,11 +6,13 @@ import {
   listFeeds,
   getReserves,
   ccipEstimateFee,
+  ccipGetMessage,
   ccipSend,
   vrfCreateSubscription,
   vrfFundSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
+  vrfRemoveConsumer,
   vrfRequest,
   functionsCreateSubscription,
   functionsGetSubscription,
@@ -99,6 +101,20 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'ccip-get-message': async () => {
+    const result = await ccipGetMessage(
+      core.getInput('message-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        offramp: core.getInput('offramp', { required: true }),
+        fromBlock: core.getInput('from-block') || '0',
+        toBlock: core.getInput('to-block') || 'latest',
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
@@ -131,6 +147,16 @@ const handlers = {
 
   'vrf-add-consumer': async () => {
     const result = await vrfAddConsumer(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('consumer-contract', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'vrf-remove-consumer': async () => {
+    const result = await vrfRemoveConsumer(
       core.getInput('subscription-id', { required: true }),
       core.getInput('consumer-contract', { required: true }),
       core.getInput('chain', { required: true }),

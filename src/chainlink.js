@@ -378,6 +378,110 @@ export async function ccipEstimateFee(
 }
 
 /**
+ * Get CCIP message delivery status by scanning ExecutionStateChanged
+ * events on the destination chain's OffRamp.
+ *
+ * CCIP doesn't expose a `getStatusByMessageId(bytes32)` view. Delivery
+ * state lives in per-sequence-number storage on the OffRamp, and the
+ * only way to go messageId → sequenceNumber is by scanning the
+ * `ExecutionStateChanged` event (messageId is indexed).
+ *
+ * Supports both v1.5+ (5-field event, includes gasUsed) and legacy
+ * v1.2/v1.3 (4-field event). Returns the first matching event state.
+ */
+export async function ccipGetMessage(
+  messageId,
+  chain,
+  { offramp, fromBlock = '0', toBlock = 'latest', rpcUrl } = {},
+) {
+  if (!messageId) throw new ChainlinkError('MISSING_MESSAGE_ID', 'message-id is required')
+  if (!offramp) throw new ChainlinkError('MISSING_OFFRAMP', 'offramp is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const normalizedId = normalizeBytes32(messageId)
+
+  // Two event signatures in the wild:
+  //  v1.5+ ExecutionStateChanged(uint64,bytes32,uint8,bytes,uint256)
+  //  v1.2/1.3 ExecutionStateChanged(uint64,bytes32,uint8,bytes)
+  // Query both, return whichever matches.
+  const topicsV15 = [
+    '0x84f4178f0724c8855c4ba94203d6af73647c851f4b23d29ab0b86aa9a7148079',
+    null,
+    normalizedId,
+  ]
+  const topicsLegacy = [
+    '0xd4f851956a5d67c3997d1c9205045fef79bae2947fdee7e9e2641abc7391ef65',
+    null,
+    normalizedId,
+  ]
+
+  for (const topics of [topicsV15, topicsLegacy]) {
+    const events = unwrapBridgeResult(
+      await bridge.chain(
+        'ethereum',
+        'get-events',
+        {
+          address: offramp,
+          topics,
+          fromBlock,
+          toBlock,
+          ...net.params,
+        },
+        net.network,
+      ),
+    )
+
+    const list = Array.isArray(events) ? events : events ? [events] : []
+    if (list.length === 0) continue
+
+    // Take the latest block's event (should be the final state).
+    const sorted = [...list].sort((a, b) =>
+      Number(BigInt(a.blockNumber || 0) - BigInt(b.blockNumber || 0)),
+    )
+    const latest = sorted[sorted.length - 1]
+
+    const sequenceNumber = latest.topics?.[1] ? String(BigInt(latest.topics[1])) : undefined
+
+    // State is the first 32-byte word of `data` — a uint8 right-padded.
+    // e.g. 0x0000...0002 → 2 (SUCCESS)
+    const stateByte = latest.data ? Number(BigInt('0x' + latest.data.slice(2, 66))) : 0
+    const state = CCIP_EXECUTION_STATES[stateByte] || `UNKNOWN(${stateByte})`
+
+    return {
+      messageId: normalizedId,
+      chain,
+      offramp,
+      state,
+      stateCode: stateByte,
+      sequenceNumber,
+      blockNumber: latest.blockNumber ? String(BigInt(latest.blockNumber)) : undefined,
+      transactionHash: latest.transactionHash,
+    }
+  }
+
+  return {
+    messageId: normalizedId,
+    chain,
+    offramp,
+    state: 'NOT_FOUND',
+    stateCode: null,
+  }
+}
+
+function normalizeBytes32(id) {
+  if (!id.startsWith('0x')) return '0x' + id.padStart(64, '0')
+  const hex = id.slice(2)
+  return '0x' + hex.padStart(64, '0')
+}
+
+const CCIP_EXECUTION_STATES = {
+  0: 'UNTOUCHED',
+  1: 'IN_PROGRESS',
+  2: 'SUCCESS',
+  3: 'FAILURE',
+}
+
+/**
  * Send a CCIP cross-chain message (optionally with tokens).
  *
  * This is a write operation — the bridge needs a signer key
@@ -509,8 +613,6 @@ export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {})
       {
         contract: coordinator,
         method: VRF_INTERFACE.getSubscription,
-        // Pass the full ABI JSON — the signature-only form trips the
-        // alloy decoder on the dynamic `address[] consumers` return.
         abi: VRF_GET_SUBSCRIPTION_ABI,
         args: [subscriptionId],
         ...net.params,
@@ -519,12 +621,21 @@ export async function vrfGetSubscription(subscriptionId, chain, { rpcUrl } = {})
     ),
   )
 
-  // Normalize the return value
-  const balance = Array.isArray(sub) ? sub[0] : sub?.balance
-  const nativeBalance = Array.isArray(sub) ? sub[1] : sub?.nativeBalance
-  const reqCount = Array.isArray(sub) ? sub[2] : sub?.reqCount
-  const owner = Array.isArray(sub) ? sub[3] : sub?.subOwner
-  const consumers = Array.isArray(sub) ? sub[4] : sub?.consumers
+  // Bridge returns the decoded tuple as a JSON-encoded string.
+  // Parse it the same way functionsGetSubscription does.
+  let data = sub
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data)
+    } catch {
+      /* use as-is */
+    }
+  }
+  const balance = Array.isArray(data) ? data[0] : data?.balance
+  const nativeBalance = Array.isArray(data) ? data[1] : data?.nativeBalance
+  const reqCount = Array.isArray(data) ? data[2] : data?.reqCount
+  const owner = Array.isArray(data) ? data[3] : data?.subOwner
+  const consumers = Array.isArray(data) ? data[4] : data?.consumers
 
   return {
     subscriptionId,
@@ -555,6 +666,38 @@ export async function vrfAddConsumer(subscriptionId, consumer, chain, { rpcUrl }
     {
       contract: coordinator,
       method: VRF_INTERFACE.addConsumer,
+      args: [subscriptionId, consumer],
+      ...net.params,
+    },
+    net.network,
+  )
+
+  return {
+    subscriptionId,
+    consumer,
+    txHash: extractTxHash(receipt),
+    coordinator,
+    chain,
+  }
+}
+
+/**
+ * Remove a consumer contract from a VRF subscription.
+ */
+export async function vrfRemoveConsumer(subscriptionId, consumer, chain, { rpcUrl } = {}) {
+  if (!subscriptionId)
+    throw new ChainlinkError('MISSING_SUBSCRIPTION_ID', 'subscription-id is required')
+  if (!consumer) throw new ChainlinkError('MISSING_CONSUMER', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const coordinator = lookupVrfCoordinator(chain)
+
+  const receipt = await bridge.chain(
+    'ethereum',
+    'call-contract',
+    {
+      contract: coordinator,
+      method: VRF_INTERFACE.removeConsumer,
       args: [subscriptionId, consumer],
       ...net.params,
     },
