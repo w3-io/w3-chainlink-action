@@ -20,11 +20,16 @@ from the coordinator at block 10673234; Sepolia VRF oracle fulfillment
 is asynchronous and can take 5–20+ min. Read `s_lastRequestFulfilled()`
 on the consumer to check.
 
-⚠️ **Functions subscription 6491**: owned by `0xbF0B95...1cBE`, not the
-bridge signer. `functions-get-subscription` (read-only) works against
-it. Write-path exercise (`functions-create-subscription` from our
-signer) is pending a path decision — either fresh sub from our signer
-or ask the `0xbF0B95` wallet to `addConsumer` a signer-owned consumer.
+✅ **Functions subscription 640 on Base Sepolia**: 5 LINK, owned by
+bridge signer `0xe4E40...e90`. Consumer deployed at
+`0xf6e25c31057dF6A26b1e5acADB71C9bA8E16F822` (W3FunctionsConsumer,
+source in `contracts/W3FunctionsConsumer.sol`).
+
+✅ **Functions write path verified end-to-end.** `addConsumer` tx
+`0x132c9eef…be57c12d`, `sendRequest` tx `0x119619cb…139e7523`.
+DON fulfilled in ~10 seconds with response
+`0x68656c6c6f2066726f6d207733` = `"hello from w3"`. Error bytes
+empty. Source: `return Functions.encodeString("hello from w3")`.
 
 ## Cleared: protocol-side decoder fix (merged)
 
