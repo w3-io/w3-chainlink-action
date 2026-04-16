@@ -126,53 +126,40 @@ describe('vrfAddConsumer', () => {
 })
 
 describe('vrfRequest', () => {
-  it('requests random words from the coordinator', async () => {
+  it('calls requestRandomWords on the consumer contract', async () => {
     mockBridge([{ value: { tx_hash: '0xreq123' } }])
 
     const result = await vrfRequest('sepolia', {
-      subscriptionId: '42',
+      consumerContract: '0x292D6d64603Dc555541E6aa8Db19Ed145479D241',
       numWords: 3,
-      callbackGasLimit: 200000,
-      requestConfirmations: 5,
     })
 
     assert.equal(result.txHash, '0xreq123')
-    assert.equal(result.subscriptionId, '42')
+    assert.equal(result.consumerContract, '0x292D6d64603Dc555541E6aa8Db19Ed145479D241')
     assert.equal(result.numWords, 3)
     assert.equal(bridgeCalls[0].operation, 'call-contract')
 
-    // Verify the args include the key hash and sub ID
-    const args = bridgeCalls[0].params.args
-    assert.equal(args[0], '0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae') // sepolia key hash
-    assert.equal(args[1], '42') // subscription ID
-    assert.equal(args[2], 5) // request confirmations
-    assert.equal(args[3], 200000) // callback gas limit
-    assert.equal(args[4], 3) // num words
+    // Consumer — not coordinator — is the contract targeted.
+    assert.equal(bridgeCalls[0].params.contract, '0x292D6d64603Dc555541E6aa8Db19Ed145479D241')
+    assert.match(bridgeCalls[0].params.method, /requestRandomWords\(uint32\)/)
+    assert.deepEqual(bridgeCalls[0].params.args, [3])
   })
 
-  it('uses defaults for optional params', async () => {
+  it('defaults numWords to 1', async () => {
     mockBridge([{ value: { tx_hash: '0x99' } }])
 
-    const result = await vrfRequest('sepolia', { subscriptionId: '1' })
+    const result = await vrfRequest('sepolia', {
+      consumerContract: '0x292D6d64603Dc555541E6aa8Db19Ed145479D241',
+    })
 
     assert.equal(result.numWords, 1)
-    const args = bridgeCalls[0].params.args
-    assert.equal(args[2], 3) // default confirmations
-    assert.equal(args[3], 100000) // default gas limit
-    assert.equal(args[4], 1) // default num words
+    assert.deepEqual(bridgeCalls[0].params.args, [1])
   })
 
-  it('throws MISSING_KEY_HASH for chains without a registered key hash', async () => {
+  it('throws MISSING_CONSUMER_CONTRACT when consumer is empty', async () => {
     await assert.rejects(
-      () => vrfRequest('arbitrum', { subscriptionId: '1' }),
-      (err) => err instanceof ChainlinkError && err.code === 'MISSING_KEY_HASH',
-    )
-  })
-
-  it('throws MISSING_SUBSCRIPTION_ID when subId is empty', async () => {
-    await assert.rejects(
-      () => vrfRequest('sepolia', { subscriptionId: '' }),
-      (err) => err instanceof ChainlinkError && err.code === 'MISSING_SUBSCRIPTION_ID',
+      () => vrfRequest('sepolia', { consumerContract: '' }),
+      (err) => err instanceof ChainlinkError && err.code === 'MISSING_CONSUMER_CONTRACT',
     )
   })
 })

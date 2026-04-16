@@ -165,105 +165,59 @@ jobs:
   #         echo "=== CCIP Fee Estimate ==="
   #         echo "${{ steps.ccip-fee.outputs.result }}"
 
-  # ── VRF: subscription read blocked on bridge decoder ───────────
-  # SKIP: vrf-get-subscription returns (uint96, uint96, uint64,
-  # address, address[]). The bridge's alloy-based decoder fails on
-  # the dynamic `address[] consumers` tail with "buffer overrun
-  # while deserializing", even with the full ABI JSON attached.
-  # Verified live via raw `cast call` — the on-chain return is
-  # well-formed; the limitation is in the bridge. Protocol-side
-  # fix needed. Subscription
-  # 71807528537906860133404221822604258614766191788723848022770699723800904247411
-  # on sepolia is funded (4 LINK, owner matches the bridge signer,
-  # 0 consumers so far).
+  # ── VRF writes (consumer deployed at 0x292D…D241 on Sepolia) ────
+  # Subscription 71807…247411 is funded (4 LINK), owner = bridge
+  # signer, consumer = W3VRFConsumer at 0x292D6d64603Dc555541E6aa8Db19Ed145479D241.
+  # Live-verified via cast: addConsumer tx 0x9405fae6…, requestRandomWords
+  # tx 0x095bd846…. Fulfillment proven by RandomWordsFulfilled event
+  # on the coordinator. This workflow runs the same path via the bridge.
+  #
+  # vrf-get-subscription stays SKIPPED — the bridge's alloy-based
+  # decoder fails on (uint96, uint96, uint64, address, address[]) with
+  # "buffer overrun while deserializing" on the dynamic address[] tail.
+  # Verified via raw cast that the on-chain return is well-formed.
+  # Protocol-side fix needed.
+  vrf-writes:
+    runs-on: ubuntu-latest
+    steps:
+      # vrf-request: consumer is already added to the sub, so this
+      # is the minimal end-to-end check (request → fulfilled event).
+      - uses: w3-io/w3-chainlink-action@main
+        id: vrf-request
+        env:
+          W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
+        bridge-allow:
+          - ethereum/call-contract
+        with:
+          command: vrf-request
+          chain: sepolia
+          subscription-id: '71807528537906860133404221822604258614766191788723848022770699723800904247411'
+          consumer-contract: '0x292D6d64603Dc555541E6aa8Db19Ed145479D241'
+          num-words: '1'
+          callback-gas-limit: '100000'
+          request-confirmations: '3'
+          rpc-url: ${{ secrets.W3_RPC_ETHEREUM_SEPOLIA }}
 
-  # ── VRF writes (requires consumer contract) ─────────────────────
-  # NOTE: VRF commands require a funded subscription and consumer contract.
-  # To test: create subscription, fund with LINK, deploy consumer, add consumer.
-  # vrf:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     # vrf-create-subscription
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: vrf-create
-  #       env:
-  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
-  #       bridge-allow:
-  #         - ethereum/call-contract
-  #       with:
-  #         command: vrf-create-subscription
-  #         chain: base
-  #
-  #     # vrf-get-subscription
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: vrf-get
-  #       with:
-  #         command: vrf-get-subscription
-  #         chain: base
-  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
-  #
-  #     # vrf-fund-subscription (requires LINK tokens)
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: vrf-fund
-  #       env:
-  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
-  #       bridge-allow:
-  #         - ethereum/call-contract
-  #       with:
-  #         command: vrf-fund-subscription
-  #         chain: base
-  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
-  #         amount: '1000000000000000000'
-  #
-  #     # vrf-add-consumer (requires deployed consumer contract)
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: vrf-add-consumer
-  #       env:
-  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
-  #       bridge-allow:
-  #         - ethereum/call-contract
-  #       with:
-  #         command: vrf-add-consumer
-  #         chain: base
-  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
-  #         consumer-contract: '<deployed-consumer-address>'
-  #
-  #     # vrf-request (requires consumer + funded subscription)
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: vrf-request
-  #       env:
-  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
-  #       bridge-allow:
-  #         - ethereum/call-contract
-  #       with:
-  #         command: vrf-request
-  #         chain: base
-  #         subscription-id: ${{ fromJSON(steps.vrf-create.outputs.result).subscriptionId }}
-  #         consumer-contract: '<deployed-consumer-address>'
-  #         num-words: '1'
-  #         callback-gas-limit: '100000'
-  #         request-confirmations: '3'
+      - run: |
+          echo "=== VRF Request ==="
+          echo "${{ steps.vrf-request.outputs.result }}"
 
-  # ── Functions (requires funded subscription) ────────────────────
-  # NOTE: Functions commands require a funded subscription.
-  # functions:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     # functions-create-subscription
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: func-create
-  #       env:
-  #         W3_SECRET_ETHEREUM: ${{ secrets.W3_SECRET_ETHEREUM }}
-  #       bridge-allow:
-  #         - ethereum/call-contract
-  #       with:
-  #         command: functions-create-subscription
-  #         chain: base
-  #
-  #     # functions-get-subscription
-  #     - uses: w3-io/w3-chainlink-action@main
-  #       id: func-get
-  #       with:
-  #         command: functions-get-subscription
-  #         chain: base
-  #         subscription-id: ${{ fromJSON(steps.func-create.outputs.result).subscriptionId }}
+  # ── Functions (read-only against existing sub 6491) ────────────
+  # Sub 6491 on Ethereum Sepolia is owned by a different wallet; read
+  # is unrestricted so this validates the bridge's Functions Router
+  # decoder against a real Subscription struct. Write-path exercise
+  # deferred until we have a signer-owned Functions sub.
+  functions-read:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: w3-io/w3-chainlink-action@main
+        id: func-get
+        with:
+          command: functions-get-subscription
+          chain: sepolia
+          subscription-id: '6491'
+          rpc-url: ${{ secrets.W3_RPC_ETHEREUM_SEPOLIA }}
+
+      - run: |
+          echo "=== Functions Subscription 6491 ==="
+          echo "${{ steps.func-get.outputs.result }}"

@@ -140,10 +140,8 @@ const handlers = {
 
   'vrf-request': async () => {
     const result = await vrfRequest(core.getInput('chain', { required: true }), {
-      subscriptionId: core.getInput('subscription-id', { required: true }),
+      consumerContract: core.getInput('consumer-contract', { required: true }),
       numWords: Number(core.getInput('num-words')) || 1,
-      callbackGasLimit: Number(core.getInput('callback-gas-limit')) || 100000,
-      requestConfirmations: Number(core.getInput('request-confirmations')) || 3,
       rpcUrl: core.getInput('rpc-url') || undefined,
     })
     setJsonOutput('result', result)
