@@ -168,6 +168,27 @@ Send a CCIP cross-chain message (optionally with tokens). **Write operation** re
 
 Track delivery via the [CCIP Explorer](https://ccip.chain.link) using the returned message ID.
 
+#### `ccip-get-message`
+
+Query the delivery status of a CCIP message by scanning `ExecutionStateChanged` events on the destination chain's OffRamp.
+
+CCIP has no `getStatusByMessageId(bytes32)` view — delivery state is stored per-sequence-number on the OffRamp, and the only way to map messageId → sequenceNumber is via the indexed event topic. This command scans both v1.5+ and legacy v1.2/v1.3 event signatures.
+
+| Input        | Type   | Required | Description                                                          |
+| ------------ | ------ | -------- | -------------------------------------------------------------------- |
+| `message-id` | string | Yes      | Message ID returned from `ccip-send`                                 |
+| `chain`      | string | Yes      | Destination chain                                                    |
+| `offramp`    | string | Yes      | Destination OffRamp address (find via CCIP Explorer or `tx receipt`) |
+| `from-block` | string | No       | Start block for event scan (default `"0"`)                           |
+| `to-block`   | string | No       | End block (default `"latest"`)                                       |
+| `rpc-url`    | string | No       | Custom RPC URL                                                       |
+
+**Output:** `{ messageId, chain, offramp, state, stateCode, sequenceNumber, blockNumber, transactionHash }`
+
+**Possible states:** `UNTOUCHED` (0), `IN_PROGRESS` (1), `SUCCESS` (2), `FAILURE` (3), `NOT_FOUND` (no event matched).
+
+**Finding the OffRamp:** open the source-chain send tx on [CCIP Explorer](https://ccip.chain.link), jump to the destination tx, and copy the `to` address (the OffRamp). Alternatively, call `Router.getOffRamps()` on the destination chain and filter by the source chain selector.
+
 ---
 
 ### VRF (Verifiable Random Function)
@@ -206,6 +227,19 @@ Whitelist a consumer contract on a subscription. **Write operation.**
 | ------------------- | ------ | -------- | -------------------------------------------- |
 | `subscription-id`   | string | Yes      | Subscription ID                              |
 | `consumer-contract` | string | Yes      | Consumer contract address                    |
+| `chain`             | string | Yes      | Target chain                                 |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ subscriptionId, consumer, txHash, coordinator, chain }`
+
+#### `vrf-remove-consumer`
+
+Un-whitelist a consumer contract from a subscription. **Write operation.** Mirrors `vrf-add-consumer`; useful when rotating consumers or decommissioning a contract.
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `subscription-id`   | string | Yes      | Subscription ID                              |
+| `consumer-contract` | string | Yes      | Consumer contract address to remove          |
 | `chain`             | string | Yes      | Target chain                                 |
 | `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
 
@@ -268,6 +302,24 @@ Get subscription details including balance, owner, and consumer list.
 | `rpc-url`         | string | No       | Custom RPC URL (recommended for reliability) |
 
 **Output:** `{ subscriptionId, chain, router, balance, owner, consumers }`
+
+#### `functions-request`
+
+Trigger a Chainlink Functions DON computation by calling `sendRequest(string source, string[] args)` on a user-deployed consumer contract. Fulfillment is asynchronous — the DON calls back into your consumer's `fulfillRequest` hook (typically 1–3 blocks later).
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `chain`             | string | Yes      | Target chain                                 |
+| `consumer-contract` | string | Yes      | Address of your Functions consumer           |
+| `source-code`       | string | Yes      | Inline JS executed by the DON                |
+| `args`              | string | No       | JSON array of string args (`["a","b"]`)      |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ txHash, consumerContract, numArgs, router, chain }`
+
+**Why via a consumer contract, not the router?** Functions requires the caller of `router.sendRequest` to be a registered consumer contract, and fulfillment callbacks land on `fulfillRequest(requestId, response, err)` — neither of which an EOA can satisfy.
+
+**Required consumer signature:** your contract must expose `function sendRequest(string calldata source, string[] calldata args) external returns (bytes32)` and internally call `_sendRequest(...)` via Chainlink's `FunctionsClient` base. The contract holds the subscription ID, DON ID, and callback gas limit as constructor / storage values — the action only passes `source` and `args`. Minimal reference consumer in the action repo at `contracts/W3FunctionsConsumer.sol`.
 
 ---
 

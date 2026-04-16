@@ -6,14 +6,17 @@ import {
   listFeeds,
   getReserves,
   ccipEstimateFee,
+  ccipGetMessage,
   ccipSend,
   vrfCreateSubscription,
   vrfFundSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
+  vrfRemoveConsumer,
   vrfRequest,
   functionsCreateSubscription,
   functionsGetSubscription,
+  functionsRequest,
   streamsListFeeds,
   streamsFetchReport,
   ChainlinkError,
@@ -98,6 +101,20 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'ccip-get-message': async () => {
+    const result = await ccipGetMessage(
+      core.getInput('message-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        offramp: core.getInput('offramp', { required: true }),
+        fromBlock: core.getInput('from-block') || '0',
+        toBlock: core.getInput('to-block') || 'latest',
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
@@ -138,6 +155,16 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'vrf-remove-consumer': async () => {
+    const result = await vrfRemoveConsumer(
+      core.getInput('subscription-id', { required: true }),
+      core.getInput('consumer-contract', { required: true }),
+      core.getInput('chain', { required: true }),
+      { rpcUrl: core.getInput('rpc-url') || undefined },
+    )
+    setJsonOutput('result', result)
+  },
+
   'vrf-request': async () => {
     const result = await vrfRequest(core.getInput('chain', { required: true }), {
       consumerContract: core.getInput('consumer-contract', { required: true }),
@@ -162,6 +189,17 @@ const handlers = {
       core.getInput('chain', { required: true }),
       { rpcUrl: core.getInput('rpc-url') || undefined },
     )
+    setJsonOutput('result', result)
+  },
+
+  'functions-request': async () => {
+    const argsInput = core.getInput('args')
+    const result = await functionsRequest(core.getInput('chain', { required: true }), {
+      consumerContract: core.getInput('consumer-contract', { required: true }),
+      source: core.getInput('source-code', { required: true }),
+      args: argsInput ? JSON.parse(argsInput) : [],
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
     setJsonOutput('result', result)
   },
 

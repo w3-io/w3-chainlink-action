@@ -165,6 +165,41 @@ commands:
         type: object
         description: Send result with status, txHash, fee, sourceChain, destinationChain, router
 
+  - name: ccip-get-message
+    description: >
+      Query CCIP message delivery status by scanning ExecutionStateChanged
+      events on the destination chain's OffRamp. Supports both v1.5+ and
+      legacy v1.2/v1.3 event signatures.
+    inputs:
+      message-id:
+        type: string
+        required: true
+        description: Message ID returned from ccip-send
+      chain:
+        type: string
+        required: true
+        description: Destination chain
+      offramp:
+        type: string
+        required: true
+        description: Destination OffRamp address
+      from-block:
+        type: string
+        required: false
+        description: Start block for event scan (default "0")
+      to-block:
+        type: string
+        required: false
+        description: End block for event scan (default "latest")
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: State info with state, stateCode, sequenceNumber, blockNumber, transactionHash
+
   # ── VRF ──────────────────────────────────────────────────────────
 
   - name: vrf-create-subscription
@@ -225,6 +260,32 @@ commands:
         type: string
         required: true
         description: Consumer contract address to whitelist
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL (recommended for reliability)
+    outputs:
+      result:
+        type: object
+        description: Result with subscriptionId, consumer, txHash, coordinator, chain
+
+  - name: vrf-remove-consumer
+    description: >
+      Un-whitelist a consumer contract from a VRF subscription.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      subscription-id:
+        type: string
+        required: true
+        description: VRF subscription ID
+      consumer-contract:
+        type: string
+        required: true
+        description: Consumer contract address to remove
       chain:
         type: string
         required: true
@@ -336,3 +397,35 @@ commands:
       result:
         type: object
         description: Subscription details with subscriptionId, chain, router, balance, owner, consumers
+
+  - name: functions-request
+    description: >
+      Trigger a Chainlink Functions DON computation by calling
+      sendRequest on a user-deployed consumer contract. Fulfillment
+      is asynchronous and lands on the consumer's fulfillRequest hook.
+      Write operation requiring a signer key via W3_SECRET_*.
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      consumer-contract:
+        type: string
+        required: true
+        description: Deployed Functions consumer address
+      source-code:
+        type: string
+        required: true
+        description: Inline JS executed by the DON
+      args:
+        type: string
+        required: false
+        description: JSON array of string args
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: Request result with txHash, consumerContract, numArgs, router, chain

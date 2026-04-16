@@ -6,10 +6,12 @@ inputs:
   command:
     description: >
       Operation to perform. Price Feeds: get-price, get-feed-info, list-feeds.
-      Proof of Reserve: por-get-reserves. CCIP: ccip-send, ccip-estimate-fee.
+      Proof of Reserve: por-get-reserves.
+      CCIP: ccip-send, ccip-estimate-fee, ccip-get-message.
       VRF: vrf-create-subscription, vrf-fund-subscription, vrf-add-consumer,
-      vrf-get-subscription, vrf-request. Functions: functions-create-subscription,
-      functions-get-subscription.
+      vrf-remove-consumer, vrf-get-subscription, vrf-request.
+      Functions: functions-create-subscription, functions-get-subscription,
+      functions-request.
     required: true
 
   # Common inputs
@@ -46,6 +48,15 @@ inputs:
     required: false
   message-id:
     description: 'CCIP message ID for ccip-wait-for-delivery / ccip-get-message.'
+    required: false
+  offramp:
+    description: 'Destination-chain OffRamp address for ccip-get-message.'
+    required: false
+  from-block:
+    description: 'Start block for event scan (default "0").'
+    required: false
+  to-block:
+    description: 'End block for event scan (default "latest").'
     required: false
   token-amounts:
     description: 'JSON array of {token, amount} objects for CCIP token transfers.'

@@ -31,15 +31,14 @@ DON fulfilled in ~10 seconds with response
 `0x68656c6c6f2066726f6d207733` = `"hello from w3"`. Error bytes
 empty. Source: `return Functions.encodeString("hello from w3")`.
 
-## Blocked on protocol-side fix
+## Cleared: protocol-side decoder fix (merged)
 
-- [ ] **`vrf-get-subscription` bridge decoder bug.** The return tuple
-      `(uint96, uint96, uint64, address, address[])` trips the bridge's
-      alloy-based decoder with "buffer overrun while deserializing" on
-      the dynamic `address[] consumers` tail. Passing the full ABI JSON
-      via `abi: ...` didn't help. Verified via raw `cast call` that the
-      on-chain return is well-formed. Filing a protocol issue would be
-      the right next step.
+✅ **`vrf-get-subscription` bridge decoder bug** — fixed in protocol
+PR #1726 (merged 2026-04-16). Root cause: `abi_decode()` vs
+`abi_decode_params()` in `decode_result()`. The old method treated
+multi-output tuples with dynamic tails as single wrapped values;
+the fix uses the correct flat-sequence decoder. Action-side JSON
+parse also fixed in this PR.
 
 ## Blocked on external state
 
@@ -60,22 +59,17 @@ empty. Source: `return Functions.encodeString("hello from w3")`.
       `streams-list-feeds` and `streams-fetch-report` against
       `api.testnet-dataengine.chain.link` and update RESULTS.md.
 
-## v0.2.0 — Complete the product coverage
+## v0.2.0 — Complete the product coverage ✅ (shipped)
 
-- [ ] `functions-request` — execute arbitrary JS source via Chainlink Functions DON
-- [ ] `ccip-get-message` — read CCIP message status from OnRamp by message ID
-- [ ] `vrf-remove-consumer` — remove a consumer from a VRF subscription
+- [x] `functions-request` — execute arbitrary JS source via Chainlink Functions DON (PR #8)
+- [x] `ccip-get-message` — resolve CCIP message state via OffRamp event scan (PR #7)
+- [x] `vrf-remove-consumer` — remove a consumer from a VRF subscription (PR #6)
 
 ## v0.3.0 — Polling and async patterns
 
 - [ ] `ccip-wait-for-delivery` — poll destination chain for CCIP message finalization
 - [ ] `vrf-wait-for-fulfillment` — poll for VRF callback event with random words
 - [ ] `functions-wait-for-fulfillment` — poll for Functions response
-
-## v0.4.0 — Data Streams
-
-- [ ] `streams-fetch-report` — fetch real-time market data report (REST, needs API key)
-- [ ] `streams-list-feeds` — list available Data Streams feeds (REST, needs API key)
 
 ## Improvements
 
