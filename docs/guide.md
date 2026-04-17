@@ -247,6 +247,39 @@ CCIP has no `getStatusByMessageId(bytes32)` view — delivery state is stored pe
 
 **Finding the OffRamp:** open the source-chain send tx on [CCIP Explorer](https://ccip.chain.link), jump to the destination tx, and copy the `to` address (the OffRamp). Alternatively, call `Router.getOffRamps()` on the destination chain and filter by the source chain selector.
 
+#### `ccip-wait-for-delivery`
+
+Poll the destination OffRamp for `ExecutionStateChanged` events matching a message ID until the state is `SUCCESS` or `FAILURE`, or the timeout expires. Wraps `ccip-get-message` in a polling loop.
+
+| Input           | Type   | Required | Description                                |
+| --------------- | ------ | -------- | ------------------------------------------ |
+| `message-id`    | string | Yes      | CCIP message ID to track                   |
+| `chain`         | string | Yes      | Destination chain                          |
+| `offramp`       | string | Yes      | Destination OffRamp address                |
+| `from-block`    | string | No       | Start block for event scan (default `"0"`) |
+| `timeout`       | string | No       | Polling timeout in seconds (default `300`) |
+| `poll-interval` | string | No       | Polling interval in seconds (default `15`) |
+| `rpc-url`       | string | No       | Custom RPC URL                             |
+
+**Output:** Same fields as `ccip-get-message` plus `elapsed` (milliseconds spent polling).
+
+**Example:**
+
+```yaml
+- id: wait
+  uses: w3-io/w3-chainlink-action@v0
+  with:
+    command: ccip-wait-for-delivery
+    message-id: '0xabc123...'
+    chain: arbitrum
+    offramp: '0xOffRampAddress'
+    timeout: '600'
+
+- run: |
+    echo "State: ${{ fromJSON(steps.wait.outputs.result).state }}"
+    echo "Elapsed: ${{ fromJSON(steps.wait.outputs.result).elapsed }}ms"
+```
+
 ---
 
 ### VRF (Verifiable Random Function)
@@ -332,6 +365,36 @@ Trigger a VRF v2.5 request by calling `requestRandomWords(uint32 numWords)` on a
 
 **Required consumer signature:** your contract must expose `function requestRandomWords(uint32 numWords) external returns (uint256)` and internally call the coordinator. The contract holds the subscription ID, key hash, callback gas limit, and confirmation count as constructor / storage values — the action only passes `numWords`. Minimal reference consumer in the action repo at `contracts/W3VRFConsumer.sol`.
 
+#### `vrf-wait-for-fulfillment`
+
+Poll a VRF consumer contract's `s_lastRequestFulfilled()` until it returns `true`, then read the first random word from `s_lastRandomWords(0)`. Useful for end-to-end VRF workflows where you need to wait for the oracle callback before proceeding.
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `chain`             | string | Yes      | Target chain                                 |
+| `consumer-contract` | string | Yes      | VRF consumer contract address                |
+| `timeout`           | string | No       | Polling timeout in seconds (default `300`)   |
+| `poll-interval`     | string | No       | Polling interval in seconds (default `10`)   |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ fulfilled, elapsed, randomWord, consumerContract, chain }`
+
+**Example:**
+
+```yaml
+- id: vrf-wait
+  uses: w3-io/w3-chainlink-action@v0
+  with:
+    command: vrf-wait-for-fulfillment
+    chain: sepolia
+    consumer-contract: '0x292D6d64603Dc555541E6aa8Db19Ed145479D241'
+    timeout: '600'
+
+- run: |
+    echo "Random word: ${{ fromJSON(steps.vrf-wait.outputs.result).randomWord }}"
+    echo "Elapsed: ${{ fromJSON(steps.vrf-wait.outputs.result).elapsed }}ms"
+```
+
 ---
 
 ### Functions
@@ -379,6 +442,38 @@ Trigger a Chainlink Functions DON computation by calling `sendRequest(string sou
 
 **Required consumer signature:** your contract must expose `function sendRequest(string calldata source, string[] calldata args) external returns (bytes32)` and internally call `_sendRequest(...)` via Chainlink's `FunctionsClient` base. The contract holds the subscription ID, DON ID, and callback gas limit as constructor / storage values — the action only passes `source` and `args`. Minimal reference consumer in the action repo at `contracts/W3FunctionsConsumer.sol`.
 
+#### `functions-wait-for-fulfillment`
+
+Poll a Functions consumer contract's `s_lastRequestFulfilled()` until `true`, then read `s_lastResponse()` and `s_lastError()`. Chainlink Functions DON fulfillment is fast (typically 1-3 blocks), so the default timeout is 120 seconds with 5-second polling.
+
+| Input               | Type   | Required | Description                                  |
+| ------------------- | ------ | -------- | -------------------------------------------- |
+| `chain`             | string | Yes      | Target chain                                 |
+| `consumer-contract` | string | Yes      | Functions consumer contract address          |
+| `timeout`           | string | No       | Polling timeout in seconds (default `120`)   |
+| `poll-interval`     | string | No       | Polling interval in seconds (default `5`)    |
+| `rpc-url`           | string | No       | Custom RPC URL (recommended for reliability) |
+
+**Output:** `{ fulfilled, elapsed, response, error, consumerContract, chain }`
+
+The `response` and `error` fields are hex-encoded bytes from the consumer contract. Decode the response with your application logic.
+
+**Example:**
+
+```yaml
+- id: fn-wait
+  uses: w3-io/w3-chainlink-action@v0
+  with:
+    command: functions-wait-for-fulfillment
+    chain: base-sepolia
+    consumer-contract: '0xf6e25c31057dF6A26b1e5acADB71C9bA8E16F822'
+    timeout: '120'
+
+- run: |
+    echo "Response: ${{ fromJSON(steps.fn-wait.outputs.result).response }}"
+    echo "Elapsed: ${{ fromJSON(steps.fn-wait.outputs.result).elapsed }}ms"
+```
+
 ---
 
 ## Authentication
@@ -425,9 +520,7 @@ Not all products are available on all chains. Use `list-feeds` to check price fe
 
 ## Future Work
 
-Features not included in v0.1.0:
-
-- **Data Streams** -- Chainlink's low-latency pull-based data feeds for DeFi. Requires a REST API key and on-chain report verification. The registry already has placeholder infrastructure (`feed-id`, `api-key` inputs in action.yml) but the command handlers are not yet implemented.
-- **Functions request execution** -- `functions-send-request` to submit JavaScript source code for DON execution. Subscription management is implemented; request dispatch is the next step.
-- **VRF fulfillment polling** -- `vrf-wait-for-fulfillment` to poll until random words are delivered. Currently returns the request tx hash; callers must check fulfillment externally.
-- **CCIP delivery tracking** -- `ccip-get-message` to check cross-chain message delivery status via the CCIP Explorer API.
+- **Data Streams live verification** -- Waiting on Chainlink to issue client ID + client secret. Code and unit tests are complete.
+- **VRF Direct Funding** -- Pay-per-request alternative to the subscription model.
+- **Historical price data** -- `get-round-data` by round ID.
+- **L2 Sequencer Uptime Feed** -- Check if L2 sequencer is up before trusting prices.

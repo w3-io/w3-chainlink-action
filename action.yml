@@ -7,11 +7,12 @@ inputs:
     description: >
       Operation to perform. Price Feeds: get-price, get-feed-info, get-round-data, list-feeds.
       Proof of Reserve: por-get-reserves.
-      CCIP: ccip-send, ccip-estimate-fee, ccip-get-message.
+      CCIP: ccip-send, ccip-estimate-fee, ccip-get-message, ccip-wait-for-delivery.
       VRF: vrf-create-subscription, vrf-fund-subscription, vrf-add-consumer,
-      vrf-remove-consumer, vrf-get-subscription, vrf-request.
+      vrf-remove-consumer, vrf-get-subscription, vrf-request,
+      vrf-wait-for-fulfillment.
       Functions: functions-create-subscription, functions-get-subscription,
-      functions-request.
+      functions-request, functions-wait-for-fulfillment.
     required: true
 
   # Common inputs
@@ -129,6 +130,9 @@ inputs:
     description: 'Polling timeout in seconds for wait-for-* commands (default 300).'
     required: false
     default: '300'
+  poll-interval:
+    description: 'Polling interval in seconds for wait-for-* commands (default varies by command).'
+    required: false
 
 outputs:
   result:

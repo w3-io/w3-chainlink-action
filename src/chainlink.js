@@ -1120,6 +1120,204 @@ export async function streamsFetchReport(
   return streamsRequest({ clientId, clientSecret, apiUrl, path })
 }
 
+// ── Polling / wait commands ────────────────────────────────────────
+
+/**
+ * Generic polling helper. Calls checkFn() at the given interval until
+ * it returns a truthy value, or throws POLL_TIMEOUT when the deadline
+ * is exceeded.
+ *
+ * @param {() => Promise<any>} checkFn - async function; truthy return stops the loop
+ * @param {{ timeout?: number, interval?: number }} opts
+ * @returns {{ result: any, elapsed: number }}
+ */
+export async function pollUntil(checkFn, { timeout = 300_000, interval = 15_000 } = {}) {
+  const start = Date.now()
+  while (true) {
+    const result = await checkFn()
+    if (result) return { result, elapsed: Date.now() - start }
+    if (Date.now() - start + interval >= timeout) {
+      throw new ChainlinkError('POLL_TIMEOUT', `Polling timed out after ${timeout}ms`)
+    }
+    await new Promise((r) => setTimeout(r, interval))
+  }
+}
+
+/**
+ * Poll the destination OffRamp for ExecutionStateChanged events
+ * matching a message ID until the state is SUCCESS or FAILURE.
+ *
+ * Wraps `ccipGetMessage` in a polling loop.
+ */
+export async function ccipWaitForDelivery(
+  messageId,
+  chain,
+  { offramp, fromBlock = '0', timeout = 300_000, pollInterval = 15_000, rpcUrl } = {},
+) {
+  if (!messageId) throw new ChainlinkError('MISSING_MESSAGE_ID', 'message-id is required')
+  if (!offramp) throw new ChainlinkError('MISSING_OFFRAMP', 'offramp is required')
+
+  const { result, elapsed } = await pollUntil(
+    async () => {
+      const msg = await ccipGetMessage(messageId, chain, { offramp, fromBlock, rpcUrl })
+      if (msg.state === 'SUCCESS' || msg.state === 'FAILURE') return msg
+      return null
+    },
+    { timeout, interval: pollInterval },
+  )
+
+  return { ...result, elapsed }
+}
+
+/**
+ * Poll a VRF consumer contract's `s_lastRequestFulfilled()` until it
+ * returns true, then read the first random word.
+ */
+export async function vrfWaitForFulfillment(
+  chain,
+  { consumerContract, timeout = 300_000, pollInterval = 10_000, rpcUrl } = {},
+) {
+  if (!consumerContract)
+    throw new ChainlinkError('MISSING_CONSUMER_CONTRACT', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+
+  const { elapsed } = await pollUntil(
+    async () => {
+      const fulfilled = unwrapBridgeResult(
+        await bridge.chain(
+          'ethereum',
+          'read-contract',
+          {
+            contract: consumerContract,
+            method: 'function s_lastRequestFulfilled() returns (bool)',
+            args: [],
+            ...net.params,
+          },
+          net.network,
+        ),
+      )
+      // Bridge may return true, "true", or "1"
+      return fulfilled === true || fulfilled === 'true' || fulfilled === '1'
+    },
+    { timeout, interval: pollInterval },
+  )
+
+  // Read the first random word
+  let randomWord
+  try {
+    const word = unwrapBridgeResult(
+      await bridge.chain(
+        'ethereum',
+        'read-contract',
+        {
+          contract: consumerContract,
+          method: 'function s_lastRandomWords(uint256) returns (uint256)',
+          args: [0],
+          ...net.params,
+        },
+        net.network,
+      ),
+    )
+    randomWord = String(word)
+  } catch {
+    // Consumer may not expose this getter; leave undefined.
+  }
+
+  return {
+    fulfilled: true,
+    elapsed,
+    randomWord: randomWord || undefined,
+    consumerContract,
+    chain,
+  }
+}
+
+/**
+ * Poll a Functions consumer contract's `s_lastRequestFulfilled()` until
+ * true, then read `s_lastResponse()` and `s_lastError()`.
+ */
+export async function functionsWaitForFulfillment(
+  chain,
+  { consumerContract, timeout = 120_000, pollInterval = 5_000, rpcUrl } = {},
+) {
+  if (!consumerContract)
+    throw new ChainlinkError('MISSING_CONSUMER_CONTRACT', 'consumer-contract is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+
+  const { elapsed } = await pollUntil(
+    async () => {
+      const fulfilled = unwrapBridgeResult(
+        await bridge.chain(
+          'ethereum',
+          'read-contract',
+          {
+            contract: consumerContract,
+            method: 'function s_lastRequestFulfilled() returns (bool)',
+            args: [],
+            ...net.params,
+          },
+          net.network,
+        ),
+      )
+      return fulfilled === true || fulfilled === 'true' || fulfilled === '1'
+    },
+    { timeout, interval: pollInterval },
+  )
+
+  // Read response and error bytes
+  let response
+  let error
+  try {
+    response = String(
+      unwrapBridgeResult(
+        await bridge.chain(
+          'ethereum',
+          'read-contract',
+          {
+            contract: consumerContract,
+            method: 'function s_lastResponse() returns (bytes)',
+            args: [],
+            ...net.params,
+          },
+          net.network,
+        ),
+      ),
+    )
+  } catch {
+    // optional
+  }
+  try {
+    error = String(
+      unwrapBridgeResult(
+        await bridge.chain(
+          'ethereum',
+          'read-contract',
+          {
+            contract: consumerContract,
+            method: 'function s_lastError() returns (bytes)',
+            args: [],
+            ...net.params,
+          },
+          net.network,
+        ),
+      ),
+    )
+  } catch {
+    // optional
+  }
+
+  return {
+    fulfilled: true,
+    elapsed,
+    response: response || undefined,
+    error: error || undefined,
+    consumerContract,
+    chain,
+  }
+}
+
 // ── Internal helpers ───────────────────────────────────────────────
 
 /**
