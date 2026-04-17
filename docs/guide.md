@@ -28,11 +28,14 @@ All commands interact with on-chain contracts via the W3 syscall bridge. The act
 
 Get the latest price from a Chainlink Data Feed.
 
-| Input     | Type   | Required | Description                                  |
-| --------- | ------ | -------- | -------------------------------------------- |
-| `pair`    | string | Yes      | Price pair (e.g. "ETH/USD", "BTC/USD")       |
-| `chain`   | string | Yes      | Target chain                                 |
-| `rpc-url` | string | No       | Custom RPC URL (recommended for reliability) |
+| Input          | Type   | Required | Description                                                   |
+| -------------- | ------ | -------- | ------------------------------------------------------------- |
+| `pair`         | string | Yes      | Price pair (e.g. "ETH/USD", "BTC/USD")                        |
+| `chain`        | string | Yes      | Target chain                                                  |
+| `feed-address` | string | No       | Direct feed contract address (bypasses the built-in registry) |
+| `rpc-url`      | string | No       | Custom RPC URL (recommended for reliability)                  |
+
+When `feed-address` is provided, the registry lookup is skipped entirely. Use this for feeds not in the curated list -- you can find any feed address on [data.chain.link](https://data.chain.link).
 
 **Output:**
 
@@ -66,15 +69,28 @@ Get the latest price from a Chainlink Data Feed.
     echo "Updated: ${{ fromJSON(steps.chainlink-price.outputs.result).updatedAt }}"
 ```
 
+**Example with direct feed address (unlisted feed):**
+
+```yaml
+- id: custom-feed
+  uses: w3-io/w3-chainlink-action@v0
+  with:
+    command: get-price
+    pair: CUSTOM/USD
+    chain: ethereum
+    feed-address: '0x1234567890abcdef1234567890abcdef12345678'
+```
+
 #### `get-feed-info`
 
 Get metadata about a specific feed (description, decimals, address).
 
-| Input     | Type   | Required | Description                                  |
-| --------- | ------ | -------- | -------------------------------------------- |
-| `pair`    | string | Yes      | Price pair                                   |
-| `chain`   | string | Yes      | Target chain                                 |
-| `rpc-url` | string | No       | Custom RPC URL (recommended for reliability) |
+| Input          | Type   | Required | Description                                                   |
+| -------------- | ------ | -------- | ------------------------------------------------------------- |
+| `pair`         | string | Yes      | Price pair                                                    |
+| `chain`        | string | Yes      | Target chain                                                  |
+| `feed-address` | string | No       | Direct feed contract address (bypasses the built-in registry) |
+| `rpc-url`      | string | No       | Custom RPC URL (recommended for reliability)                  |
 
 **Output:**
 
@@ -97,6 +113,48 @@ List all registered feeds for a chain.
 | `chain` | string | Yes      | Target chain |
 
 **Output:** `{ chain, feeds: [{ pair, address }, ...], count }`
+
+#### `get-round-data`
+
+Get historical price data by round ID from a Chainlink Data Feed. Useful for auditing past prices or verifying historical oracle state.
+
+| Input          | Type   | Required | Description                                                   |
+| -------------- | ------ | -------- | ------------------------------------------------------------- |
+| `pair`         | string | Yes      | Price pair (e.g. "ETH/USD")                                   |
+| `chain`        | string | Yes      | Target chain                                                  |
+| `round-id`     | string | Yes      | Round ID to query                                             |
+| `feed-address` | string | No       | Direct feed contract address (bypasses the built-in registry) |
+| `rpc-url`      | string | No       | Custom RPC URL (recommended for reliability)                  |
+
+**Output:**
+
+```json
+{
+  "pair": "ETH/USD",
+  "chain": "ethereum",
+  "price": "1905.23000000",
+  "priceRaw": "190523000000",
+  "decimals": 8,
+  "roundId": "110680464442257310138",
+  "updatedAt": "1712345700",
+  "feedAddress": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419"
+}
+```
+
+**Example:**
+
+```yaml
+- id: historical
+  uses: w3-io/w3-chainlink-action@v0
+  with:
+    command: get-round-data
+    pair: ETH/USD
+    chain: ethereum
+    round-id: '110680464442257310138'
+
+- run: |
+    echo "Historical price: ${{ fromJSON(steps.historical.outputs.result).price }}"
+```
 
 ---
 
