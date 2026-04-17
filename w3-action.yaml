@@ -3,6 +3,23 @@ partner: chainlink
 name: Chainlink Integration
 version: 0.3.0
 repo: w3-io/w3-chainlink-action
+description: >
+  Chainlink is the standard oracle network for bringing off-chain data
+  on-chain. Provides decentralized price feeds (700+ pairs), Proof of
+  Reserve attestations, CCIP for cross-chain messaging and token
+  transfers, VRF for verifiable randomness, Functions for serverless
+  compute executed by the DON, and Data Streams for low-latency
+  market data.
+context: >
+  Use when you need trusted price data (get-price), verifiable randomness
+  (vrf-request), cross-chain messaging (ccip-send), or serverless compute
+  (functions-request). Do not use for simple token swaps — use Uniswap,
+  CoW Swap, or 1inch instead. Cost: price feed reads are free (on-chain
+  call), VRF and Functions consume LINK tokens per request, CCIP charges
+  a fee in LINK or native token. Typical patterns: get-price for spot
+  prices, vrf-create-subscription then vrf-fund-subscription then
+  vrf-request for randomness. Prerequisites: Chainlink API key required
+  for Data Streams; VRF and Functions require funded subscriptions.
 
 commands:
   # ── Price Feeds ──────────────────────────────────────────────────
