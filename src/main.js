@@ -8,15 +8,18 @@ import {
   ccipEstimateFee,
   ccipGetMessage,
   ccipSend,
+  ccipWaitForDelivery,
   vrfCreateSubscription,
   vrfFundSubscription,
   vrfGetSubscription,
   vrfAddConsumer,
   vrfRemoveConsumer,
   vrfRequest,
+  vrfWaitForFulfillment,
   functionsCreateSubscription,
   functionsGetSubscription,
   functionsRequest,
+  functionsWaitForFulfillment,
   streamsListFeeds,
   streamsFetchReport,
   ChainlinkError,
@@ -115,6 +118,23 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'ccip-wait-for-delivery': async () => {
+    const timeoutInput = core.getInput('timeout')
+    const pollInput = core.getInput('poll-interval')
+    const result = await ccipWaitForDelivery(
+      core.getInput('message-id', { required: true }),
+      core.getInput('chain', { required: true }),
+      {
+        offramp: core.getInput('offramp', { required: true }),
+        fromBlock: core.getInput('from-block') || '0',
+        timeout: timeoutInput ? Number(timeoutInput) * 1000 : 300_000,
+        pollInterval: pollInput ? Number(pollInput) * 1000 : 15_000,
+        rpcUrl: core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
   // ── VRF ───────────────────────────────────────────────────────
 
   'vrf-create-subscription': async () => {
@@ -174,6 +194,18 @@ const handlers = {
     setJsonOutput('result', result)
   },
 
+  'vrf-wait-for-fulfillment': async () => {
+    const timeoutInput = core.getInput('timeout')
+    const pollInput = core.getInput('poll-interval')
+    const result = await vrfWaitForFulfillment(core.getInput('chain', { required: true }), {
+      consumerContract: core.getInput('consumer-contract', { required: true }),
+      timeout: timeoutInput ? Number(timeoutInput) * 1000 : 300_000,
+      pollInterval: pollInput ? Number(pollInput) * 1000 : 10_000,
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
   // ── Functions ─────────────────────────────────────────────────
 
   'functions-create-subscription': async () => {
@@ -198,6 +230,18 @@ const handlers = {
       consumerContract: core.getInput('consumer-contract', { required: true }),
       source: core.getInput('source-code', { required: true }),
       args: argsInput ? JSON.parse(argsInput) : [],
+      rpcUrl: core.getInput('rpc-url') || undefined,
+    })
+    setJsonOutput('result', result)
+  },
+
+  'functions-wait-for-fulfillment': async () => {
+    const timeoutInput = core.getInput('timeout')
+    const pollInput = core.getInput('poll-interval')
+    const result = await functionsWaitForFulfillment(core.getInput('chain', { required: true }), {
+      consumerContract: core.getInput('consumer-contract', { required: true }),
+      timeout: timeoutInput ? Number(timeoutInput) * 1000 : 120_000,
+      pollInterval: pollInput ? Number(pollInput) * 1000 : 5_000,
       rpcUrl: core.getInput('rpc-url') || undefined,
     })
     setJsonOutput('result', result)

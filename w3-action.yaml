@@ -1,7 +1,7 @@
 kind: integration
 partner: chainlink
 name: Chainlink Integration
-version: 0.1.0
+version: 0.3.0
 repo: w3-io/w3-chainlink-action
 
 commands:
@@ -429,3 +429,103 @@ commands:
       result:
         type: object
         description: Request result with txHash, consumerContract, numArgs, router, chain
+
+  # ── Polling / wait commands ───────────────────────────────────────
+
+  - name: ccip-wait-for-delivery
+    description: >
+      Poll the destination chain OffRamp for ExecutionStateChanged
+      events matching a message ID until delivery is SUCCESS or FAILURE.
+    inputs:
+      message-id:
+        type: string
+        required: true
+        description: CCIP message ID to track
+      chain:
+        type: string
+        required: true
+        description: Destination chain
+      offramp:
+        type: string
+        required: true
+        description: Destination OffRamp address
+      from-block:
+        type: string
+        required: false
+        description: Start block for event scan (default "0")
+      timeout:
+        type: string
+        required: false
+        description: Polling timeout in seconds (default 300)
+      poll-interval:
+        type: string
+        required: false
+        description: Polling interval in seconds (default 15)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: Message state with state, stateCode, sequenceNumber, blockNumber, transactionHash, elapsed
+
+  - name: vrf-wait-for-fulfillment
+    description: >
+      Poll a VRF consumer contract's s_lastRequestFulfilled() until
+      true, then read the first random word from s_lastRandomWords(0).
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      consumer-contract:
+        type: string
+        required: true
+        description: VRF consumer contract address
+      timeout:
+        type: string
+        required: false
+        description: Polling timeout in seconds (default 300)
+      poll-interval:
+        type: string
+        required: false
+        description: Polling interval in seconds (default 10)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: Fulfillment result with fulfilled, elapsed, randomWord, consumerContract, chain
+
+  - name: functions-wait-for-fulfillment
+    description: >
+      Poll a Functions consumer contract's s_lastRequestFulfilled()
+      until true, then read s_lastResponse() and s_lastError().
+    inputs:
+      chain:
+        type: string
+        required: true
+        description: Target chain
+      consumer-contract:
+        type: string
+        required: true
+        description: Functions consumer contract address
+      timeout:
+        type: string
+        required: false
+        description: Polling timeout in seconds (default 120)
+      poll-interval:
+        type: string
+        required: false
+        description: Polling interval in seconds (default 5)
+      rpc-url:
+        type: string
+        required: false
+        description: Custom RPC URL
+    outputs:
+      result:
+        type: object
+        description: Fulfillment result with fulfilled, elapsed, response, error, consumerContract, chain
