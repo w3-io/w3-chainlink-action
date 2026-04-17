@@ -9,7 +9,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint src/",
-    "test": "node --test test/feeds.test.js test/por.test.js test/ccip.test.js test/vrf.test.js test/functions.test.js",
+    "test": "node --test test/feeds.test.js test/por.test.js test/ccip.test.js test/vrf.test.js test/functions.test.js test/feed-address.test.js test/round-data.test.js",
     "test:live": "CHAINLINK_LIVE_TEST=1 node --test test/live.test.js",
     "all": "npm run format && npm run lint && npm run test && npm run build"
   },

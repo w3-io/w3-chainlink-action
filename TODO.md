@@ -73,9 +73,9 @@ parse also fixed in this PR.
 
 ## Improvements
 
-- [ ] `feed-address` input — bypass registry for unlisted feeds (declared in action.yml, not wired)
+- [x] `feed-address` input — bypass registry for unlisted feeds
 - [ ] VRF Direct Funding — pay-per-request alternative to subscription model
-- [ ] Historical price data — `get-round-data` by round ID (ABI exists in registry)
+- [x] Historical price data — `get-round-data` by round ID
 - [ ] L2 Sequencer Uptime Feed — check if L2 sequencer is up before trusting prices
 - [ ] Mainnet PoR feed expansion — currently only WBTC/BTC, add others as Chainlink deploys them
 - [ ] `vrf-get-subscription` field parsing — owner and consumers return empty on some VRF v2.5 responses

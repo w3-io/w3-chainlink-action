@@ -28480,11 +28480,11 @@ function decodeAbiHex(hex) {
  * @param {string} chain - e.g. "ethereum", "sepolia", "base"
  * @returns {{ pair, chain, price, decimals, roundId, updatedAt, raw }}
  */
-async function getPrice(pair, chain, { rpcUrl } = {}) {
+async function getPrice(pair, chain, { feedAddress: feedAddressInput, rpcUrl } = {}) {
   if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required (e.g. "ETH/USD")')
 
   const net = resolveNetwork(chain, rpcUrl)
-  const feedAddress = lookupFeed(pair, chain)
+  const feedAddress = feedAddressInput || lookupFeed(pair, chain)
 
   // Read decimals first so we can format the answer
   const decimalsResult = unwrapBridgeResult(
@@ -28537,11 +28537,11 @@ async function getPrice(pair, chain, { rpcUrl } = {}) {
 /**
  * Get metadata about a specific feed.
  */
-async function getFeedInfo(pair, chain, { rpcUrl } = {}) {
+async function getFeedInfo(pair, chain, { feedAddress: feedAddressInput, rpcUrl } = {}) {
   if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required')
 
   const net = resolveNetwork(chain, rpcUrl)
-  const feedAddress = lookupFeed(pair, chain)
+  const feedAddress = feedAddressInput || lookupFeed(pair, chain)
 
   const [description, decimalsResult] = await Promise.all([
     bridge
@@ -28600,6 +28600,74 @@ function listFeeds(chain) {
     chain,
     feeds: Object.entries(feeds).map(([pair, address]) => ({ pair, address })),
     count: Object.keys(feeds).length,
+  }
+}
+
+/**
+ * Get historical price data by round ID from a Chainlink Data Feed.
+ *
+ * @param {string} pair - e.g. "ETH/USD"
+ * @param {string} chain - e.g. "ethereum", "sepolia", "base"
+ * @param {object} options
+ * @param {string} options.roundId - The round ID to query
+ * @param {string} [options.feedAddress] - Direct feed address (bypasses registry)
+ * @param {string} [options.rpcUrl] - Custom RPC URL
+ * @returns {{ pair, chain, price, decimals, roundId, updatedAt, feedAddress, raw }}
+ */
+async function getRoundData(
+  pair,
+  chain,
+  { roundId, feedAddress: feedAddressInput, rpcUrl } = {},
+) {
+  if (!pair) throw new ChainlinkError('MISSING_PAIR', 'pair is required (e.g. "ETH/USD")')
+  if (!roundId) throw new ChainlinkError('MISSING_ROUND_ID', 'round-id is required')
+
+  const net = resolveNetwork(chain, rpcUrl)
+  const feedAddress = feedAddressInput || lookupFeed(pair, chain)
+
+  // Read decimals first so we can format the answer
+  const decimalsResult = unwrapBridgeResult(
+    await bridge.chain(
+      'ethereum',
+      'read-contract',
+      {
+        contract: feedAddress,
+        method: FEED_INTERFACE.decimals,
+        args: [],
+        ...net.params,
+      },
+      net.network,
+    ),
+  )
+  const feedDecimals = parseInt(decimalsResult, 10)
+
+  // Read round data for the specified round ID
+  const roundData = unwrapBridgeResult(
+    await bridge.chain(
+      'ethereum',
+      'read-contract',
+      {
+        contract: feedAddress,
+        method: FEED_INTERFACE.getRoundData,
+        args: [roundId],
+        ...net.params,
+      },
+      net.network,
+    ),
+  )
+
+  const parsed = parseRoundData(roundData, feedDecimals)
+
+  return {
+    pair,
+    chain,
+    price: parsed.price,
+    priceRaw: parsed.answerRaw,
+    decimals: feedDecimals,
+    roundId: parsed.roundId,
+    updatedAt: parsed.updatedAt,
+    feedAddress,
+    raw: roundData,
   }
 }
 
@@ -29736,7 +29804,10 @@ const handlers = {
     const result = await getPrice(
       lib_core.getInput('pair', { required: true }),
       lib_core.getInput('chain', { required: true }),
-      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+      {
+        feedAddress: lib_core.getInput('feed-address') || undefined,
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
     )
     setJsonOutput('result', result)
   },
@@ -29745,7 +29816,23 @@ const handlers = {
     const result = await getFeedInfo(
       lib_core.getInput('pair', { required: true }),
       lib_core.getInput('chain', { required: true }),
-      { rpcUrl: lib_core.getInput('rpc-url') || undefined },
+      {
+        feedAddress: lib_core.getInput('feed-address') || undefined,
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
+    )
+    setJsonOutput('result', result)
+  },
+
+  'get-round-data': async () => {
+    const result = await getRoundData(
+      lib_core.getInput('pair', { required: true }),
+      lib_core.getInput('chain', { required: true }),
+      {
+        roundId: lib_core.getInput('round-id', { required: true }),
+        feedAddress: lib_core.getInput('feed-address') || undefined,
+        rpcUrl: lib_core.getInput('rpc-url') || undefined,
+      },
     )
     setJsonOutput('result', result)
   },

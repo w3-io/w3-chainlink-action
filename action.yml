@@ -5,7 +5,7 @@ author: 'w3-io'
 inputs:
   command:
     description: >
-      Operation to perform. Price Feeds: get-price, get-feed-info, list-feeds.
+      Operation to perform. Price Feeds: get-price, get-feed-info, get-round-data, list-feeds.
       Proof of Reserve: por-get-reserves.
       CCIP: ccip-send, ccip-estimate-fee, ccip-get-message.
       VRF: vrf-create-subscription, vrf-fund-subscription, vrf-add-consumer,
@@ -23,6 +23,9 @@ inputs:
     required: false
   feed-address:
     description: 'Direct feed contract address (bypasses the built-in registry). Use for feeds not in the curated list.'
+    required: false
+  round-id:
+    description: 'Round ID for get-round-data command. Fetch historical price data for a specific round.'
     required: false
 
   # RPC provider
